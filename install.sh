@@ -115,7 +115,8 @@ clone_repo() {
     if [ -d "$PROJECT_DIR" ]; then
         print_warning "项目目录已存在: $PROJECT_DIR"
         echo ""
-        read -p "$(echo -e ${YELLOW}是否删除并重新克隆? (y/n): ${NC})" -n 1 -r
+        echo -e "${YELLOW}是否删除并重新克隆? (y/n): ${NC}\c"
+        read -n 1 -r REPLY
         echo ""
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             print_info "删除旧目录..."
@@ -251,7 +252,8 @@ main() {
 
     # 询问是否立即启动
     echo ""
-    read -p "$(echo -e ${YELLOW}是否立即启动 Web UI? (y/n): ${NC})" -n 1 -r
+    echo -e "${YELLOW}是否立即启动 Web UI? (y/n): ${NC}\c"
+    read -n 1 -r REPLY
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo ""
