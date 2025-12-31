@@ -74,10 +74,22 @@ class FeishuBitable:
     def list_fields(self, app_token: str, table_id: str) -> List[Dict]:
         """获取表格字段列表"""
         result = self._request(
-            "GET", 
+            "GET",
             f"/bitable/v1/apps/{app_token}/tables/{table_id}/fields"
         )
         return result.get("data", {}).get("items", [])
+    
+    def has_status_field(self) -> bool:
+        """检查表格是否有"状态"字段"""
+        try:
+            fields = self.list_fields(FEISHU_APP_TOKEN, FEISHU_TABLE_ID)
+            for field in fields:
+                if field.get("field_name") == "状态":
+                    return True
+            return False
+        except Exception as e:
+            logger.warning(f"Failed to check status field: {e}")
+            return False
     
     def add_records(
         self, 
@@ -252,10 +264,19 @@ def save_trade_order(
                 "入场价格": entry_amount,
                 "止盈价格": take_profit,
                 "信息内容": info_content,
-                "群名": group_name,
-                "状态": status  # 新增状态字段
+                "群名": group_name
             }
         }
+        
+        # 检查是否有"状态"字段
+        has_status = _feishu_client.has_status_field()
+        if has_status:
+            # 如果有状态字段，直接写入
+            record["fields"]["状态"] = status
+        else:
+            # 如果没有状态字段，将状态信息添加到信息内容前面
+            status_prefix = f"【{status}】\n"
+            record["fields"]["信息内容"] = status_prefix + info_content
         
         # 如果提供了币种信息，则添加
         if coin_info:
@@ -666,13 +687,17 @@ def update_order_status(record_id: str, status: str, order_id: str = "", entry_p
         更新结果
     """
     try:
-        # 构建更新字段
-        fields = {
-            "状态": status
-        }
+        # 检查是否有"状态"字段
+        has_status = _feishu_client.has_status_field()
         
-        # 如果提供了订单ID，更新信息内容
-        if order_id:
+        # 构建更新字段
+        fields = {}
+        
+        if has_status:
+            # 如果有状态字段，直接更新
+            fields["状态"] = status
+        else:
+            # 如果没有状态字段，更新信息内容字段
             # 获取当前记录
             result = _feishu_client._request(
                 "GET",
@@ -681,19 +706,51 @@ def update_order_status(record_id: str, status: str, order_id: str = "", entry_p
             current_fields = result.get("data", {}).get("fields", {})
             current_info = current_fields.get("信息内容", "")
             
+            # 更新状态标记在信息内容前面
+            # 移除旧的状态标记
+            import re
+            current_info = re.sub(r'^【[^\n]+】\n', '', current_info)
+            
+            # 添加新的状态标记
+            current_info = f"【{status}】\n{current_info}"
+            
+            fields["信息内容"] = current_info
+        
+        # 如果提供了订单ID、开仓价格或持仓数量，更新信息内容
+        if order_id or entry_price or position_size:
+            # 获取当前记录（如果之前没有获取过）
+            result = _feishu_client._request(
+                "GET",
+                f"/bitable/v1/apps/{FEISHU_APP_TOKEN}/tables/{FEISHU_TABLE_ID}/records/{record_id}"
+            )
+            current_fields = result.get("data", {}).get("fields", {})
+            current_info = current_fields.get("信息内容", "")
+            
+            # 如果之前已经添加了状态标记，需要保留
+            if not has_status and "信息内容" in fields:
+                # 已经在上面处理了，使用处理后的内容
+                current_info = fields["信息内容"]
+            
             # 更新信息内容中的订单ID
-            if "订单ID：" not in current_info:
-                current_info = f"订单ID：{order_id}\n{current_info}"
+            if order_id and "订单ID：" not in current_info:
+                # 在状态标记之后添加
+                lines = current_info.split('\n', 1)
+                if len(lines) == 2:
+                    current_info = f"{lines[0]}\n订单ID：{order_id}\n{lines[1]}"
+                else:
+                    current_info = f"订单ID：{order_id}\n{current_info}"
             
             # 更新实际开仓价格
             if entry_price:
-                current_info = current_info.replace("入场价格", "开仓价格") if "入场价格" in current_info else current_info
                 if "实际开仓价格" not in current_info:
                     current_info = f"{current_info}\n实际开仓价格：{entry_price}"
                 else:
                     # 替换现有的实际开仓价格
                     import re
                     current_info = re.sub(r'实际开仓价格[：:]\s*[^\n]+', f'实际开仓价格：{entry_price}', current_info)
+                
+                # 同时更新入场价格字段
+                fields["入场价格"] = entry_price
             
             # 更新实际持仓数量
             if position_size:
@@ -705,10 +762,6 @@ def update_order_status(record_id: str, status: str, order_id: str = "", entry_p
                     current_info = re.sub(r'实际持仓数量[：:]\s*[^\n]+', f'实际持仓数量：{position_size}', current_info)
             
             fields["信息内容"] = current_info
-            
-            # 同时更新入场价格字段
-            if entry_price:
-                fields["入场价格"] = entry_price
         
         # 更新记录
         update_result = _feishu_client._request(

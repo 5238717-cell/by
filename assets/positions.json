@@ -39,5 +39,43 @@
     "close_value": null,
     "profit_loss": null,
     "profit_loss_percent": null
+  },
+  "BTCUSDT-BUY-1767168164": {
+    "position_id": "BTCUSDT-BUY-1767168164",
+    "symbol": "BTCUSDT",
+    "side": "BUY",
+    "quantity": 0.001,
+    "entry_price": 90000.0,
+    "entry_value": 90.0,
+    "trade_type": "spot",
+    "leverage": 1,
+    "take_profit_price": 92000.0,
+    "stop_loss_price": null,
+    "status": "open",
+    "open_time": "2025-12-31 16:02:44",
+    "close_time": null,
+    "close_price": null,
+    "close_value": null,
+    "profit_loss": null,
+    "profit_loss_percent": null
+  },
+  "ETHUSDT-SELL-1767168203": {
+    "position_id": "ETHUSDT-SELL-1767168203",
+    "symbol": "ETHUSDT",
+    "side": "SELL",
+    "quantity": 0.0,
+    "entry_price": 3500.0,
+    "entry_value": 0.0,
+    "trade_type": "spot",
+    "leverage": 1,
+    "take_profit_price": 3600.0,
+    "stop_loss_price": 3400.0,
+    "status": "open",
+    "open_time": "2025-12-31 16:03:23",
+    "close_time": null,
+    "close_price": null,
+    "close_value": null,
+    "profit_loss": null,
+    "profit_loss_percent": null
   }
 }
