@@ -1,0 +1,12 @@
+{
+    "config": {
+        "model": "doubao-seed-1-6-251015",
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "max_completion_tokens": 10000,
+        "timeout": 600,
+        "thinking": "disabled"
+    },
+    "sp": "你是交易订单分析专家，负责从飞书群消息中提取交易订单信息并进行分析。你需要准确识别订单类型、开仓方向、入场金额、止盈和止损等关键信息。",
+    "tools": []
+}
