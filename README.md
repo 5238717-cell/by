@@ -14,6 +14,28 @@
 
 ---
 
+## 🎯 30 秒快速启动
+
+### Linux/Mac
+
+```bash
+# 一行命令启动 Web UI
+./scripts/quick_deploy.sh
+```
+
+### Windows
+
+```cmd
+# 一行命令启动 Web UI
+scripts\quick_deploy.bat
+```
+
+然后在浏览器访问：**http://localhost:5000** 🚀
+
+> 💡 完整部署选项请查看 [一键部署指南](DEPLOY.md)
+
+---
+
 ## 🏗️ 系统架构
 
 ```
@@ -80,7 +102,49 @@
 
 ## 🚀 快速开始
 
-### 1. 安装依赖
+### 🌟 一键部署（推荐）
+
+如果您想快速启动系统，推荐使用一键部署脚本：
+
+#### Linux/Mac 系统
+
+```bash
+# 方式一：完整部署（包含所有选项）
+chmod +x scripts/deploy.sh
+./scripts/deploy.sh
+
+# 方式二：快速部署（仅启动 Web UI，适合新手）
+chmod +x scripts/quick_deploy.sh
+./scripts/quick_deploy.sh
+```
+
+#### Windows 系统
+
+```cmd
+# 方式一：完整部署（包含所有选项）
+scripts\deploy.bat
+
+# 方式二：快速部署（仅启动 Web UI，适合新手）
+scripts\quick_deploy.bat
+```
+
+> 💡 **推荐**: 新手建议使用快速部署（quick_deploy），它会自动完成所有配置并启动 Web UI 界面，您可以在浏览器中通过图形界面完成后续配置。
+
+一键部署会自动完成：
+- ✅ Python 环境检查
+- ✅ 依赖包安装
+- ✅ 配置文件初始化
+- ✅ 服务启动
+
+详细说明请参考：[一键部署指南](DEPLOY.md)
+
+---
+
+### 手动安装
+
+如果您想手动控制部署过程，可以按以下步骤操作：
+
+#### 1. 安装依赖
 
 ```bash
 pip install -r requirements.txt
@@ -163,6 +227,7 @@ python src/web_ui.py
 
 ## 📖 详细文档
 
+- **[一键部署指南](DEPLOY.md)**: 完整的一键部署方案，支持 Linux/Mac/Windows
 - **[多 Agent 系统指南](docs/MULTI_AGENT_GUIDE.md)**: 详细介绍多 Agent 架构、各 Agent 功能和使用方法
 - **[配置指南](docs/SETUP_GUIDE.md)**: 完整的飞书应用和多维表格配置说明
 - **[Webhook 配置指南](docs/WEBHOOK_CONFIG_GUIDE.md)**: Webhook 服务器的交互式配置向导使用说明
