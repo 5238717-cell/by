@@ -21,6 +21,11 @@ from tools.feishu_bitable_tool import (
     get_recent_orders,
     calculate_profit_loss
 )
+from tools.binance_trading_tool import (
+    binance_spot_open_position,
+    binance_futures_open_position,
+    binance_get_balance
+)
 
 LLM_CONFIG = "config/agent_llm_config.json"
 
@@ -82,6 +87,7 @@ def build_agent(ctx=None):
 - **提取离场信息**：离场价格、盈亏信息、离场原因（止盈离场/止损离场/手动离场）
 - **订单关联管理**：通过订单ID和父订单ID关联开仓、补仓、离场操作
 - **盈亏计算**：基于关联订单计算总盈亏点位和收益率（考虑补仓后的加权平均价格）
+- **币安API交易**：支持在币安交易所执行现货和期货开仓操作
 - 将解析后的数据保存到飞书多维表格
 - 查询和分析历史交易数据
 - 生成交易统计报告和优化建议
@@ -164,6 +170,28 @@ def build_agent(ctx=None):
 ## get_table_fields 工具
 用于获取表格字段结构，无需参数。
 
+## binance_spot_open_position 工具
+用于在币安现货市场开仓。参数说明：
+- symbol: 交易对符号（如：BTCUSDT、ETHUSDT）
+- direction: 交易方向（BUY-做多/买入 或 SELL-做空/卖出）
+- amount: 交易数量或金额（如：0.001表示BTC数量，100表示USDT金额）
+- order_type: 订单类型（MARKET-市价单 或 LIMIT-限价单，默认MARKET）
+- price: 限价单价格（仅限价单需要，如：90000）
+
+## binance_futures_open_position 工具
+用于在币安期货市场开仓（USDT合约）。参数说明：
+- symbol: 交易对符号（如：BTCUSDT、ETHUSDT）
+- direction: 交易方向（BUY-做多/买入 或 SELL-做空/卖出）
+- amount: 交易数量或金额（如：0.001表示BTC数量，100表示USDT金额）
+- order_type: 订单类型（MARKET-市价单 或 LIMIT-限价单，默认MARKET）
+- price: 限价单价格（仅限价单需要，如：90000）
+- leverage: 杠杆倍数（如：1、5、10、20，默认1倍）
+- position_side: 持仓方向（LONG-多头 或 SHORT-空头，可选）
+
+## binance_get_balance 工具
+用于查询币安账户余额。参数说明：
+- asset: 资产符号（如：USDT、BTC，可选，不填则查询所有资产）
+
 # 输出格式
 请以 Markdown 格式返回清晰的分析结果，包括：
 1. 操作类型（开仓/补仓/离场）
@@ -183,6 +211,12 @@ def build_agent(ctx=None):
 - 确保所有提取的数据准确无误
 - 遇到无法解析的内容时，保持诚实并提供可能的替代方案
 - 工具参数与表格字段已自动映射，无需担心中文字段问题
+- **币安API使用**：
+  - 需要配置币安API密钥（API Key和Secret Key）
+  - 默认使用测试网环境，测试网不会进行真实交易
+  - 执行币安交易前，建议先查询账户余额确认配置正确
+  - 期货交易支持杠杆设置，请谨慎使用高杠杆
+  - 交易操作具有风险，请根据实际需求使用
 
 # 示例
 
@@ -246,7 +280,15 @@ def build_agent(ctx=None):
     return create_agent(
         model=llm,
         system_prompt=system_prompt,
-        tools=[get_table_fields, save_trade_order, get_recent_orders, calculate_profit_loss],
+        tools=[
+            get_table_fields, 
+            save_trade_order, 
+            get_recent_orders, 
+            calculate_profit_loss,
+            binance_spot_open_position,
+            binance_futures_open_position,
+            binance_get_balance
+        ],
         checkpointer=get_memory_saver(),
         state_schema=AgentState,
     )
