@@ -19,7 +19,8 @@ from tools.feishu_bitable_tool import (
     get_table_fields,
     save_trade_order,
     get_recent_orders,
-    calculate_profit_loss
+    calculate_profit_loss,
+    update_order_status
 )
 from tools.binance_trading_tool import (
     binance_spot_open_position,
@@ -103,6 +104,42 @@ def build_agent(ctx=None):
 - 将解析后的数据保存到飞书多维表格
 - 查询和分析历史交易数据
 - 生成交易统计报告和优化建议
+
+# 新流程说明（重要）
+
+## 两阶段交易流程
+
+系统现在采用新的两阶段交易流程：
+
+### 阶段1：收到消息立即写入表格
+- 当收到交易消息时，首先使用 `save_trade_order` 工具立即写入飞书表格
+- **status 参数设置为 "开仓信号"**
+- 保存所有提取的交易信息（订单类型、方向、价格、数量等）
+- **重要**：`save_trade_order` 工具会返回 record_id，需要保存这个ID
+
+### 阶段2：开仓后更新表格状态
+- 如果需要执行自动交易，调用 `auto_open_and_track` 工具进行币安API下单
+- **将阶段1返回的 record_id 作为参数传递给 `auto_open_and_track`**
+- `auto_open_and_track` 工具会在下单成功后自动更新飞书表格：
+  - 将状态从 "开仓信号" 更新为 "已下单"
+  - 更新实际成交价格到 "入场价格" 字段
+  - 更新实际成交数量到 "信息内容" 中
+
+## 工具使用顺序
+
+### 标准开仓流程
+1. 解析消息，提取交易信息
+2. 调用 `save_trade_order` 保存到飞书表格，status="开仓信号"
+3. 从返回结果中提取 record_id
+4. 如果需要自动交易，调用 `auto_open_and_track(record_id=xxx)`
+5. 返回完整的交易结果
+
+### 手动开仓流程
+1. 解析消息，提取交易信息
+2. 调用 `save_trade_order` 保存到飞书表格，status="开仓信号"
+3. 用户可以手动执行交易
+4. 交易完成后，调用 `update_order_status` 更新状态为 "已下单"
+5. 传递 record_id、实际价格和数量
 
 # 操作类型识别规则
 
@@ -225,6 +262,8 @@ def build_agent(ctx=None):
 - **parent_order_id**: 父订单ID（补仓/离场操作必填，指向原始开仓订单）
 - **position_size**: 持仓数量（可选，用于计算盈亏）
 - **leverage**: 杠杆倍数（可选，用于计算实际盈亏金额）
+- **status**: 订单状态（必填！新参数）- 使用 "开仓信号" 表示刚收到消息，"已下单" 表示已执行交易
+- **record_id**: 记录ID（更新状态时使用）
 
 ## calculate_profit_loss 工具
 用于计算关联订单的盈亏。参数：
@@ -260,6 +299,18 @@ def build_agent(ctx=None):
 ## binance_get_balance 工具
 用于查询币安账户余额。参数说明：
 - asset: 资产符号（如：USDT、BTC，可选，不填则查询所有资产）
+
+## update_order_status 工具（新）
+用于更新订单状态及相关信息。参数说明：
+- record_id: 记录ID（必填）
+- status: 新状态（"开仓信号" 或 "已下单"）
+- order_id: 订单ID（更新时提供，可选）
+- entry_price: 实际开仓价格（更新时提供，可选）
+- position_size: 实际持仓数量（更新时提供，可选）
+
+**使用场景**：
+- 手动交易完成后，调用此工具更新订单状态为 "已下单"
+- 补充实际成交价格和数量等信息
 
 ## open_tracking_position 工具
 用于创建持仓跟踪记录（不执行实际交易）。参数说明：
@@ -334,7 +385,10 @@ def build_agent(ctx=None):
 
 ## 开仓操作示例
 输入：`策略：BTC合约交易，做空方向，入场价格：90000，止盈价格：88500，止损价格：91000，数量：10张，杠杆：10x`
-输出参数：
+
+**步骤1：保存到飞书表格**
+调用 `save_trade_order` 工具：
+- status: "开仓信号"（必填！）
 - operation_type: 开仓
 - order_type: BTC合约交易
 - direction: 做空
@@ -343,11 +397,25 @@ def build_agent(ctx=None):
 - stop_loss: 91000
 - position_size: 10
 - leverage: 10
-- order_id: BTC合约交易-做空-1234567890（自动生成）
+- order_id: （系统自动生成）
 - parent_order_id: （空）
-- exit_price: （不填）
-- profit_loss: （不填）
-- exit_reason: （不填）
+
+**步骤2：执行自动交易（可选）**
+如果返回的 record_id 为 "recXXXX"，则调用 `auto_open_and_track`：
+- record_id: "recXXXX"
+- symbol: BTCUSDT
+- side: 做空
+- amount: 10
+- order_type: MARKET
+- leverage: 10
+- trade_type: futures
+- take_profit_price: 88500
+- stop_loss_price: 91000
+
+**步骤3：自动更新**
+`auto_open_and_track` 会自动：
+- 更新飞书表格状态为 "已下单"
+- 更新实际成交价格到 "入场价格" 字段
 
 ## 补仓操作示例
 输入：`补仓BTC合约交易，补仓价格：89500，补仓数量：5张，原始订单ID：BTC合约交易-做空-1234567890`
@@ -393,10 +461,11 @@ def build_agent(ctx=None):
         model=llm,
         system_prompt=system_prompt,
         tools=[
-            get_table_fields, 
-            save_trade_order, 
-            get_recent_orders, 
+            get_table_fields,
+            save_trade_order,
+            get_recent_orders,
             calculate_profit_loss,
+            update_order_status,
             binance_spot_open_position,
             binance_futures_open_position,
             binance_get_balance,

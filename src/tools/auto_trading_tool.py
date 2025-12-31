@@ -14,6 +14,9 @@ from tools.binance_trading_tool import _binance_trader
 # 导入持仓跟踪工具
 from tools.position_tracking_tool import _position_manager
 
+# 导入飞书表格配置
+from tools.feishu_bitable_tool import FEISHU_APP_TOKEN, FEISHU_TABLE_ID
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -286,6 +289,7 @@ def auto_open_and_track(
     trade_type: str = "spot",
     take_profit_price: str = "",
     stop_loss_price: str = "",
+    record_id: str = "",  # 飞书表格记录ID，用于更新订单状态
     runtime=None
 ) -> str:
     """
@@ -301,6 +305,7 @@ def auto_open_and_track(
         trade_type: 交易类型 (spot-现货 或 futures-期货, 默认spot)
         take_profit_price: 止盈价格 (可选, 如: 92000)
         stop_loss_price: 止损价格 (可选, 如: 88000)
+        record_id: 飞书表格记录ID (可选, 用于更新订单状态为"已下单")
     
     Returns:
         交易和跟踪结果
@@ -332,6 +337,43 @@ def auto_open_and_track(
             stop_loss_price=stop_loss_price,
             enable_tracking=True
         )
+        
+        # 如果提供了record_id且交易成功，更新飞书表格状态
+        update_status_result = ""
+        if record_id and result["order_success"]:
+            try:
+                from tools.feishu_bitable_tool import _feishu_client
+                
+                # 获取实际成交价格和数量
+                order_result = result.get("order_result", {})
+                executed_price = order_result.get("price", "")
+                executed_qty = order_result.get("quantity", "")
+                
+                # 生成订单ID
+                import time
+                order_id = f"{symbol}-{side_upper}-{int(time.time())}"
+                
+                # 更新飞书表格状态
+                update_data = {
+                    "fields": {
+                        "状态": "已下单"
+                    }
+                }
+                
+                # 如果有实际价格，更新入场价格字段
+                if executed_price and executed_price != "0":
+                    update_data["fields"]["入场价格"] = executed_price
+                
+                # 更新记录
+                _feishu_client._request(
+                    "PATCH",
+                    f"/bitable/v1/apps/{FEISHU_APP_TOKEN}/tables/{FEISHU_TABLE_ID}/records/{record_id}",
+                    json=update_data
+                )
+                
+                update_status_result = f"\n✅ **飞书表格状态已更新**: 状态改为'已下单'"
+            except Exception as e:
+                update_status_result = f"\n⚠️ **飞书表格状态更新失败**: {str(e)}"
         
         # 构建返回信息
         output_parts = []
@@ -366,6 +408,10 @@ def auto_open_and_track(
             output_parts.append(f"\n💡 **提示**: 当价格达到目标时,发送止盈指令即可自动平仓并计算收益。")
         else:
             output_parts.append(f"❌ **持仓跟踪创建失败**: {tracking_result.get('error')}")
+        
+        # 添加飞书表格更新结果
+        if update_status_result:
+            output_parts.append(update_status_result)
         
         return "\n".join(output_parts)
     

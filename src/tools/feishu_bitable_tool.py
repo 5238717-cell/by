@@ -167,6 +167,8 @@ def save_trade_order(
     parent_order_id: str = "",  # 父订单ID（补仓/离场时使用，指向原始开仓）
     position_size: str = "",  # 持仓数量
     leverage: str = "",  # 杠杆倍数
+    status: str = "开仓信号",  # 订单状态：开仓信号 / 已下单
+    record_id: str = "",  # 记录ID（更新状态时使用）
     runtime=None
 ) -> str:
     """
@@ -189,6 +191,8 @@ def save_trade_order(
         parent_order_id: 父订单ID（补仓/离场时使用，指向原始开仓订单）
         position_size: 持仓数量
         leverage: 杠杆倍数
+        status: 订单状态（开仓信号/已下单）
+        record_id: 记录ID（更新状态时使用）
     
     Returns:
         保存结果
@@ -248,7 +252,8 @@ def save_trade_order(
                 "入场价格": entry_amount,
                 "止盈价格": take_profit,
                 "信息内容": info_content,
-                "群名": group_name
+                "群名": group_name,
+                "状态": status  # 新增状态字段
             }
         }
         
@@ -276,9 +281,16 @@ def save_trade_order(
             [record]
         )
         
+        # 获取记录ID
+        record_id = ""
+        if result.get("data", {}).get("records"):
+            record_id = result["data"]["records"][0].get("record_id", "")
+        
         operation_text = f"{operation_type}订单" if operation_type else "订单"
         logger.info(f"Successfully saved {operation_text}: {order_type} {direction}")
-        return f"Successfully saved {operation_text}: {order_type} {direction} with {entry_amount}"
+        
+        # 返回包含 record_id 的结果
+        return f"Successfully saved {operation_text}: {order_type} {direction} with {entry_amount}, record_id: {record_id}"
     except Exception as e:
         error_msg = f"Failed to save trade order: {str(e)}"
         logger.error(error_msg)
@@ -634,5 +646,80 @@ def get_recent_orders(limit: int = 10, runtime=None) -> str:
         return f"Recent orders: {orders}"
     except Exception as e:
         error_msg = f"Failed to get recent orders: {str(e)}"
+        logger.error(error_msg)
+        return error_msg
+
+
+@tool
+def update_order_status(record_id: str, status: str, order_id: str = "", entry_price: str = "", position_size: str = "", runtime=None) -> str:
+    """
+    更新订单状态及相关信息
+    
+    Args:
+        record_id: 记录ID（必填）
+        status: 新状态（开仓信号/已下单）
+        order_id: 订单ID（更新时提供）
+        entry_price: 实际开仓价格（更新时提供）
+        position_size: 实际持仓数量（更新时提供）
+    
+    Returns:
+        更新结果
+    """
+    try:
+        # 构建更新字段
+        fields = {
+            "状态": status
+        }
+        
+        # 如果提供了订单ID，更新信息内容
+        if order_id:
+            # 获取当前记录
+            result = _feishu_client._request(
+                "GET",
+                f"/bitable/v1/apps/{FEISHU_APP_TOKEN}/tables/{FEISHU_TABLE_ID}/records/{record_id}"
+            )
+            current_fields = result.get("data", {}).get("fields", {})
+            current_info = current_fields.get("信息内容", "")
+            
+            # 更新信息内容中的订单ID
+            if "订单ID：" not in current_info:
+                current_info = f"订单ID：{order_id}\n{current_info}"
+            
+            # 更新实际开仓价格
+            if entry_price:
+                current_info = current_info.replace("入场价格", "开仓价格") if "入场价格" in current_info else current_info
+                if "实际开仓价格" not in current_info:
+                    current_info = f"{current_info}\n实际开仓价格：{entry_price}"
+                else:
+                    # 替换现有的实际开仓价格
+                    import re
+                    current_info = re.sub(r'实际开仓价格[：:]\s*[^\n]+', f'实际开仓价格：{entry_price}', current_info)
+            
+            # 更新实际持仓数量
+            if position_size:
+                if "实际持仓数量" not in current_info:
+                    current_info = f"{current_info}\n实际持仓数量：{position_size}"
+                else:
+                    # 替换现有的实际持仓数量
+                    import re
+                    current_info = re.sub(r'实际持仓数量[：:]\s*[^\n]+', f'实际持仓数量：{position_size}', current_info)
+            
+            fields["信息内容"] = current_info
+            
+            # 同时更新入场价格字段
+            if entry_price:
+                fields["入场价格"] = entry_price
+        
+        # 更新记录
+        update_result = _feishu_client._request(
+            "PATCH",
+            f"/bitable/v1/apps/{FEISHU_APP_TOKEN}/tables/{FEISHU_TABLE_ID}/records/{record_id}",
+            json={"fields": fields}
+        )
+        
+        logger.info(f"Successfully updated record {record_id} status to {status}")
+        return f"Successfully updated order status to {status}" + (f" with order_id: {order_id}" if order_id else "")
+    except Exception as e:
+        error_msg = f"Failed to update order status: {str(e)}"
         logger.error(error_msg)
         return error_msg
