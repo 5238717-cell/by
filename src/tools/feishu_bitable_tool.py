@@ -159,6 +159,10 @@ def save_trade_order(
     raw_message: str,
     group_name: str = "未知群",
     coin_info: str = "",
+    operation_type: str = "开仓",  # 新增：操作类型（开仓/离场）
+    exit_price: str = "",  # 新增：离场价格
+    profit_loss: str = "",  # 新增：盈亏信息
+    exit_reason: str = "",  # 新增：离场原因
     runtime=None
 ) -> str:
     """
@@ -173,6 +177,10 @@ def save_trade_order(
         raw_message: 原始消息内容
         group_name: 群名称（默认：未知群）
         coin_info: 币种信息（可选）
+        operation_type: 操作类型（开仓/离场）
+        exit_price: 离场价格（仅离场操作时使用）
+        profit_loss: 盈亏信息（仅离场操作时使用，如：盈利100U、亏损50U）
+        exit_reason: 离场原因（如：止盈离场、止损离场、手动离场）
     
     Returns:
         保存结果
@@ -194,9 +202,33 @@ def save_trade_order(
         if coin_info:
             record["fields"]["币种信息"] = coin_info
         
-        # 将止损信息附加到信息内容中（因为表格中没有止损价格字段）
-        if stop_loss:
-            record["fields"]["信息内容"] = f"{raw_message}\n止损：{stop_loss}"
+        # 如果是离场操作，将离场相关信息添加到信息内容中
+        if operation_type == "离场":
+            exit_info_parts = [f"操作类型：离场"]
+            if exit_price:
+                exit_info_parts.append(f"离场价格：{exit_price}")
+            if profit_loss:
+                exit_info_parts.append(f"盈亏：{profit_loss}")
+            if exit_reason:
+                exit_info_parts.append(f"离场原因：{exit_reason}")
+            
+            # 将离场信息附加到原始消息中
+            record["fields"]["信息内容"] = f"{raw_message}\n{', '.join(exit_info_parts)}"
+            
+            # 离场操作时，入场价格显示为"-"或保持空
+            if not entry_amount:
+                record["fields"]["入场价格"] = "-"
+            
+            # 离场操作时，止盈价格显示为离场价格
+            if exit_price and not take_profit:
+                record["fields"]["止盈价格"] = f"离场：{exit_price}"
+        else:
+            # 开仓操作
+            record["fields"]["信息内容"] = f"操作类型：开仓\n{raw_message}"
+            
+            # 将止损信息附加到信息内容中（因为表格中没有止损价格字段）
+            if stop_loss:
+                record["fields"]["信息内容"] = f"{record['fields']['信息内容']}\n止损：{stop_loss}"
         
         # 添加记录
         result = _feishu_client.add_records(
@@ -205,8 +237,9 @@ def save_trade_order(
             [record]
         )
         
-        logger.info(f"Successfully saved trade order: {order_type} {direction}")
-        return f"Successfully saved trade order: {order_type} {direction} with {entry_amount}"
+        operation_text = f"{operation_type}订单" if operation_type else "订单"
+        logger.info(f"Successfully saved {operation_text}: {order_type} {direction}")
+        return f"Successfully saved {operation_text}: {order_type} {direction} with {entry_amount}"
     except Exception as e:
         error_msg = f"Failed to save trade order: {str(e)}"
         logger.error(error_msg)

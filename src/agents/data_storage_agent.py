@@ -104,27 +104,68 @@ class DataStorageAgent:
         Returns:
             字段字典
         """
+        # 获取操作类型
+        operation_type = order_info.get('operation_type', '开仓')
+        
         fields = {
             self.field_mapping['group_name']: order_info.get('group_name'),
-            self.field_mapping['message_content']: order_info.get('message_content'),
         }
 
-        # 添加可选字段
-        if order_info.get('order_type'):
-            fields[self.field_mapping['order_type']] = order_info['order_type']
+        # 根据操作类型构建不同的字段
+        if operation_type == '离场':
+            # 离场操作的信息内容
+            exit_info_parts = [f"操作类型：离场"]
+            
+            if order_info.get('exit_price'):
+                exit_info_parts.append(f"离场价格：{order_info['exit_price']}")
+            
+            if order_info.get('profit_loss'):
+                exit_info_parts.append(f"盈亏：{order_info['profit_loss']}")
+            
+            if order_info.get('exit_reason'):
+                exit_info_parts.append(f"离场原因：{order_info['exit_reason']}")
+            
+            # 组合信息内容
+            original_message = order_info.get('message_content', '')
+            fields[self.field_mapping['message_content']] = f"{original_message}\n{', '.join(exit_info_parts)}"
+            
+            # 离场操作时的字段处理
+            fields[self.field_mapping['order_type']] = order_info.get('order_type', '平仓')
+            fields[self.field_mapping['direction']] = order_info.get('direction', '-')
+            
+            # 离场时，入场价格显示为"-"
+            fields[self.field_mapping['entry_amount']] = '-'
+            
+            # 离场价格（如果有）
+            if order_info.get('exit_price'):
+                fields[self.field_mapping['take_profit']] = f"离场：{order_info['exit_price']}"
+            else:
+                fields[self.field_mapping['take_profit']] = '-'
+        else:
+            # 开仓操作的信息内容
+            original_message = order_info.get('message_content', '')
+            message_parts = [f"操作类型：开仓", original_message]
+            
+            # 添加止损信息
+            if order_info.get('stop_loss'):
+                message_parts.append(f"止损：{order_info['stop_loss']}")
+            
+            fields[self.field_mapping['message_content']] = '\n'.join(message_parts)
+            
+            # 添加可选字段
+            if order_info.get('order_type'):
+                fields[self.field_mapping['order_type']] = order_info['order_type']
 
-        if order_info.get('direction'):
-            fields[self.field_mapping['direction']] = order_info['direction']
+            if order_info.get('direction'):
+                fields[self.field_mapping['direction']] = order_info['direction']
 
-        if order_info.get('entry_amount'):
-            fields[self.field_mapping['entry_amount']] = order_info['entry_amount']
+            if order_info.get('entry_amount'):
+                fields[self.field_mapping['entry_amount']] = order_info['entry_amount']
 
-        if order_info.get('take_profit'):
-            fields[self.field_mapping['take_profit']] = order_info['take_profit']
+            if order_info.get('take_profit'):
+                fields[self.field_mapping['take_profit']] = order_info['take_profit']
 
-        if order_info.get('stop_loss'):
-            fields[self.field_mapping['stop_loss']] = order_info['stop_loss']
-
+        # 添加策略关键词
         if order_info.get('strategy_keywords'):
             keywords = order_info['strategy_keywords']
             if isinstance(keywords, list):
@@ -132,6 +173,7 @@ class DataStorageAgent:
             else:
                 fields[self.field_mapping['strategy_keywords']] = keywords
 
+        # 添加时间
         if order_info.get('parsed_at'):
             fields[self.field_mapping['parsed_at']] = order_info['parsed_at']
 

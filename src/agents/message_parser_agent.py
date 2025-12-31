@@ -16,6 +16,11 @@ class MessageParserAgent:
     def __init__(self):
         # 定义提取规则
         self.patterns = {
+            # 操作类型（新增）
+            'operation_type': [
+                r'平仓|离场|出局|了结|close|exit',  # 离场
+                r'开仓|入场|建仓|买入|卖出|做多|做空|long|short|buy|sell'  # 开仓
+            ],
             # 订单类型
             'order_type': [
                 r'开仓', r'平仓', r'买入', r'卖出', r'做多', r'做空',
@@ -34,6 +39,22 @@ class MessageParserAgent:
                 r'仓位[:：\s]*([0-9,.]+)\s*(U|USDT|USD)?',
                 r'金额[:：\s]*([0-9,.]+)\s*(U|USDT|USD)?'
             ],
+            # 离场价格（新增）
+            'exit_price': [
+                r'离场价格[:：\s]*([0-9,.]+)\s*(U|USDT|USD)?',
+                r'平仓价格[:：\s]*([0-9,.]+)\s*(U|USDT|USD)?',
+                r'出局价格[:：\s]*([0-9,.]+)\s*(U|USDT|USD)?',
+                r'close[:：\s]*([0-9,.]+)\s*(U|USDT|USD)?'
+            ],
+            # 盈亏信息（新增）
+            'profit_loss': [
+                r'盈利[:：\s]*([+-]?[0-9,.]+)\s*(U|USDT|USD|%)?',
+                r'亏损[:：\s]*([+-]?[0-9,.]+)\s*(U|USDT|USD|%)?',
+                r'盈亏[:：\s]*([+-]?[0-9,.]+)\s*(U|USDT|USD|%)?',
+                r'获利[:：\s]*([+-]?[0-9,.]+)\s*(U|USDT|USD|%)?',
+                r'profit[:：\s]*([+-]?[0-9,.]+)\s*(U|USDT|USD|%)?',
+                r'pnl[:：\s]*([+-]?[0-9,.]+)\s*(U|USDT|USD|%)?'
+            ],
             # 止盈
             'take_profit': [
                 r'止盈[:：\s]*([0-9,.]+)\s*(%|U|USDT|USD)?',
@@ -48,6 +69,14 @@ class MessageParserAgent:
                 r'风控[:：\s]*([0-9,.]+)\s*(%|U|USDT|USD)?',
                 r'sl[:：\s]*([0-9,.]+)\s*(%|U|USDT|USD)?',
                 r'止损位[:：\s]*([0-9,.]+)\s*(%|U|USDT|USD)?'
+            ],
+            # 离场原因（新增）
+            'exit_reason': [
+                r'止盈离场',
+                r'止损离场',
+                r'手动离场',
+                r'技术离场',
+                r'风控离场'
             ],
             # 策略关键词
             'strategy': [
@@ -119,6 +148,51 @@ class MessageParserAgent:
 
         return keywords if keywords else None
 
+    def extract_operation_type(self, text: str) -> str:
+        """提取操作类型：开仓 或 离场"""
+        # 先检查是否是离场
+        exit_keywords = ['平仓', '离场', '出局', '了结', 'close', 'exit']
+        for keyword in exit_keywords:
+            if keyword in text:
+                return '离场'
+        
+        # 如果不是离场，则默认为开仓
+        return '开仓'
+
+    def extract_exit_price(self, text: str) -> Optional[str]:
+        """提取离场价格"""
+        for pattern in self.patterns['exit_price']:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group(0)
+        return None
+
+    def extract_profit_loss(self, text: str) -> Optional[str]:
+        """提取盈亏信息"""
+        for pattern in self.patterns['profit_loss']:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group(0)
+        return None
+
+    def extract_exit_reason(self, text: str) -> Optional[str]:
+        """提取离场原因"""
+        for pattern in self.patterns['exit_reason']:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group(0)
+        
+        # 如果消息中包含止盈相关关键词，则为止盈离场
+        if re.search(r'止盈|目标达成', text, re.IGNORECASE):
+            return '止盈离场'
+        
+        # 如果消息中包含止损相关关键词，则为止损离场
+        if re.search(r'止损|风控', text, re.IGNORECASE):
+            return '止损离场'
+        
+        # 默认为手动离场
+        return None
+
     def parse(self, message_content: str, group_name: str) -> Dict[str, Any]:
         """
         解析消息内容，提取订单信息
@@ -133,34 +207,66 @@ class MessageParserAgent:
         try:
             logger.info(f"开始解析消息: {message_content[:100]}...")
 
-            # 提取各字段
-            order_type = self.extract_order_type(message_content)
-            direction = self.extract_direction(message_content)
-            entry_amount = self.extract_entry_amount(message_content)
-            take_profit = self.extract_take_profit(message_content)
-            stop_loss = self.extract_stop_loss(message_content)
+            # 提取操作类型（开仓/离场）
+            operation_type = self.extract_operation_type(message_content)
+            
+            # 根据操作类型提取不同的字段
+            if operation_type == '离场':
+                # 离场操作特有字段
+                exit_price = self.extract_exit_price(message_content)
+                profit_loss = self.extract_profit_loss(message_content)
+                exit_reason = self.extract_exit_reason(message_content)
+                
+                # 离场时不需要入场金额、止盈、止损
+                order_type = self.extract_order_type(message_content)
+                direction = self.extract_direction(message_content)
+                entry_amount = None
+                take_profit = None
+                stop_loss = None
+            else:
+                # 开仓操作字段
+                order_type = self.extract_order_type(message_content)
+                direction = self.extract_direction(message_content)
+                entry_amount = self.extract_entry_amount(message_content)
+                take_profit = self.extract_take_profit(message_content)
+                stop_loss = self.extract_stop_loss(message_content)
+                
+                # 开仓时不需要离场相关字段
+                exit_price = None
+                profit_loss = None
+                exit_reason = None
+            
+            # 提取策略关键词
             strategy_keywords = self.extract_strategy_keywords(message_content)
 
             # 构建订单信息
             order_info = {
                 "group_name": group_name,
                 "message_content": message_content,
+                "operation_type": operation_type,  # 新增：操作类型
                 "order_type": order_type,
                 "direction": direction,
                 "entry_amount": entry_amount,
                 "take_profit": take_profit,
                 "stop_loss": stop_loss,
+                "exit_price": exit_price,  # 新增：离场价格
+                "profit_loss": profit_loss,  # 新增：盈亏信息
+                "exit_reason": exit_reason,  # 新增：离场原因
                 "strategy_keywords": strategy_keywords,
                 "parsed_at": datetime.now().isoformat()
             }
 
             logger.info("解析结果:")
             logger.info(f"  群名称: {order_info['group_name']}")
+            logger.info(f"  操作类型: {order_info['operation_type']}")
             logger.info(f"  订单类型: {order_info['order_type']}")
             logger.info(f"  开仓方向: {order_info['direction']}")
             logger.info(f"  入场金额: {order_info['entry_amount']}")
             logger.info(f"  止盈: {order_info['take_profit']}")
             logger.info(f"  止损: {order_info['stop_loss']}")
+            logger.info(f"  离场价格: {order_info['exit_price']}")
+            logger.info(f"  盈亏信息: {order_info['profit_loss']}")
+            logger.info(f"  离场原因: {order_info['exit_reason']}")
             logger.info(f"  策略关键词: {order_info['strategy_keywords']}")
 
             return {
