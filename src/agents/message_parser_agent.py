@@ -148,6 +148,125 @@ class MessageParserAgent:
 
         return keywords if keywords else None
 
+    def extract_tracking_intent(self, text: str) -> Dict[str, Any]:
+        """
+        提取持仓跟踪意图
+        
+        Returns:
+            包含跟踪意图的字典:
+            - intent: 'open_tracking' 或 'close_tracking' 或 None
+            - symbol: 交易对
+            - side: 方向
+            - quantity: 数量
+            - price: 价格
+            - reason: 平仓原因
+        """
+        result = {
+            'intent': None,
+            'symbol': None,
+            'side': None,
+            'quantity': None,
+            'price': None,
+            'reason': None
+        }
+        
+        # 提取交易对 (如: BTCUSDT, ETHUSDT, BTC/USDT)
+        symbol_patterns = [
+            r'([A-Z]{2,10})(?:/)?USDT',
+            r'([A-Z]{2,10})(?:/)?BUSD',
+            r'([A-Z]{2,10})(?:/)?USD',
+        ]
+        for pattern in symbol_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                result['symbol'] = match.group(1).upper() + "USDT"
+                break
+        
+        # 判断意图类型
+        # 开仓跟踪关键词
+        open_tracking_keywords = [
+            r'开始跟踪', r'跟踪持仓', r'记录持仓',
+            r'开仓跟踪', r'买入并跟踪', r'做多并跟踪',
+            r'卖出并跟踪', r'做空并跟踪'
+        ]
+        for keyword in open_tracking_keywords:
+            if re.search(keyword, text, re.IGNORECASE):
+                result['intent'] = 'open_tracking'
+                break
+        
+        # 止盈/平仓跟踪关键词
+        close_tracking_keywords = [
+            r'止盈', r'平仓', r'离场', r'出局',
+            r'卖出止盈', r'止盈卖出', r'平仓止盈',
+            r'达到目标', r'止盈点已到', r'止盈了',
+            r'止损', r'止损平仓', r'止损离场',
+            r'卖出', r'平仓卖出'
+        ]
+        for keyword in close_tracking_keywords:
+            if re.search(keyword, text, re.IGNORECASE):
+                result['intent'] = 'close_tracking'
+                break
+        
+        # 如果没有明确的意图关键词，根据其他信息判断
+        if not result['intent']:
+            # 如果包含"止盈"或"平仓"相关词汇
+            if re.search(r'止盈|平仓|离场|出局|close|exit', text, re.IGNORECASE):
+                result['intent'] = 'close_tracking'
+            # 如果包含"开仓"或"买入"相关词汇
+            elif re.search(r'开仓|入场|建仓', text, re.IGNORECASE):
+                result['intent'] = 'open_tracking'
+        
+        # 提取方向（仅开仓时需要）
+        if result['intent'] == 'open_tracking':
+            if re.search(r'做多|看多|long|买入|buy', text, re.IGNORECASE):
+                result['side'] = 'BUY'
+            elif re.search(r'做空|看空|short|卖出|sell', text, re.IGNORECASE):
+                result['side'] = 'SELL'
+        
+        # 提取数量
+        quantity_patterns = [
+            r'数量[:：\s]*([0-9,.]+)',
+            r'持仓[:：\s]*([0-9,.]+)',
+            r'买入[:：\s]*([0-9,.]+)\s*(BTC|ETH|USDT)?',
+            r'卖出[:：\s]*([0-9,.]+)\s*(BTC|ETH|USDT)?'
+        ]
+        for pattern in quantity_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                result['quantity'] = match.group(1)
+                break
+        
+        # 提取价格（可能是开仓价或平仓价）
+        price_patterns = [
+            r'价格[:：\s]*([0-9,.]+)',
+            r'入场价[:：\s]*([0-9,.]+)',
+            r'开仓价[:：\s]*([0-9,.]+)',
+            r'平仓价[:：\s]*([0-9,.]+)',
+            r'离场价[:：\s]*([0-9,.]+)',
+            r'止盈价[:：\s]*([0-9,.]+)',
+            r'目标价[:：\s]*([0-9,.]+)',
+            r'成本[:：\s]*([0-9,.]+)',
+            r'@([0-9,.]+)'
+        ]
+        for pattern in price_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                result['price'] = match.group(1)
+                break
+        
+        # 提取平仓原因（仅平仓时需要）
+        if result['intent'] == 'close_tracking':
+            if re.search(r'止盈|目标达成', text, re.IGNORECASE):
+                result['reason'] = '止盈平仓'
+            elif re.search(r'止损|风控', text, re.IGNORECASE):
+                result['reason'] = '止损平仓'
+            elif re.search(r'手动|主动', text, re.IGNORECASE):
+                result['reason'] = '手动平仓'
+            else:
+                result['reason'] = '手动平仓'
+        
+        return result
+
     def extract_operation_type(self, text: str) -> str:
         """提取操作类型：开仓、补仓 或 离场"""
         # 先检查是否是补仓

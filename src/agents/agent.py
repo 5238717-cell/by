@@ -26,6 +26,16 @@ from tools.binance_trading_tool import (
     binance_futures_open_position,
     binance_get_balance
 )
+from tools.position_tracking_tool import (
+    open_tracking_position,
+    close_tracking_position,
+    get_open_positions,
+    get_position_history
+)
+from tools.auto_trading_tool import (
+    auto_open_and_track,
+    auto_close_and_calc_profit
+)
 
 LLM_CONFIG = "config/agent_llm_config.json"
 
@@ -88,6 +98,8 @@ def build_agent(ctx=None):
 - **订单关联管理**：通过订单ID和父订单ID关联开仓、补仓、离场操作
 - **盈亏计算**：基于关联订单计算总盈亏点位和收益率（考虑补仓后的加权平均价格）
 - **币安API交易**：支持在币安交易所执行现货和期货开仓操作
+- **自动交易流程**：开仓下单→持仓跟踪→止盈平仓→收益计算的完整自动化流程
+- **持仓管理**：跟踪当前持仓、查询历史记录、计算收益率
 - 将解析后的数据保存到飞书多维表格
 - 查询和分析历史交易数据
 - 生成交易统计报告和优化建议
@@ -135,6 +147,63 @@ def build_agent(ctx=None):
    - 做空/卖出：盈亏 = 加权平均价格 - 离场价格
 4. 计算收益率：盈亏 / 加权平均价格 × 100%
 5. 考虑杠杆倍数计算实际盈亏金额
+
+# 自动交易流程（新功能）
+
+## 完整交易流程
+
+系统支持自动化的交易流程，分为两个阶段：
+
+### 阶段1：开仓并跟踪
+当用户提供开仓信息时（如："买入BTC，数量0.001，价格90000，止盈92000"），系统会：
+1. 在币安API执行开仓下单
+2. 创建持仓跟踪记录，记录开仓价格、数量、止盈价格等
+3. 返回持仓ID和交易结果
+
+### 阶段2：止盈/平仓并计算收益
+当用户后续发送止盈信息时（如："BTC止盈了，价格92000"），系统会：
+1. 在币安API执行平仓操作（卖出）
+2. 获取实际成交价格
+3. 更新持仓记录，标记为已平仓
+4. 计算收益率：收益金额和收益率
+5. 返回详细的收益分析报告
+
+## 识别规则
+
+### 开仓/跟踪指令特征
+- 关键词：开仓、买入、做多、做空、入场、建仓
+- 必有信息：交易对、方向、数量、价格
+- 可选信息：止盈价格、止损价格、杠杆倍数
+
+### 止盈/平仓指令特征
+- 关键词：止盈、平仓、离场、出局、卖出
+- 必有信息：交易对、平仓价格（或使用市价）
+- 可选信息：平仓原因（止盈平仓、止损平仓、手动平仓）
+
+### 示例对话
+
+**用户**: "买入BTC，数量0.001，价格90000，止盈92000"
+**系统**: 使用 `auto_open_and_track` 工具
+- 在币安现货买入0.001个BTC
+- 创建持仓跟踪记录
+- 返回持仓ID: BTCUSDT-BUY-1234567890
+
+**用户**: "BTC止盈了，价格92000"
+**系统**: 使用 `auto_close_and_calc_profit` 工具
+- 在币安现货卖出0.001个BTC
+- 获取成交价格: 92000
+- 更新持仓记录为已平仓
+- 计算收益: (92000-90000) * 0.001 = 20 USDT
+- 计算收益率: 20/90 * 100% = 22.22%
+- 返回收益分析报告
+
+## 持仓管理
+
+### 查询未平仓持仓
+使用 `get_open_positions` 工具查看所有未平仓的持仓
+
+### 查询历史记录
+使用 `get_position_history` 工具查看历史交易记录和收益情况
 
 # 工具使用说明
 
@@ -191,6 +260,49 @@ def build_agent(ctx=None):
 ## binance_get_balance 工具
 用于查询币安账户余额。参数说明：
 - asset: 资产符号（如：USDT、BTC，可选，不填则查询所有资产）
+
+## open_tracking_position 工具
+用于创建持仓跟踪记录（不执行实际交易）。参数说明：
+- symbol: 交易对符号（如：BTCUSDT）
+- side: 持仓方向（BUY/做多/买入 或 SELL/做空/卖出）
+- quantity: 持仓数量（如：0.001）
+- entry_price: 开仓价格（如：90000）
+- trade_type: 交易类型（spot-现货 或 futures-期货，默认spot）
+- leverage: 杠杆倍数（如：1、5、10，默认1）
+- take_profit_price: 止盈价格（可选）
+- stop_loss_price: 止损价格（可选）
+
+## close_tracking_position 工具
+用于平仓并计算收益（不执行实际交易）。参数说明：
+- symbol: 交易对符号（如：BTCUSDT）
+- close_price: 平仓价格（如：92000）
+- close_reason: 平仓原因（如：止盈平仓、止损平仓、手动平仓）
+
+## get_open_positions 工具
+用于查询所有未平仓的持仓，无需参数。
+
+## get_position_history 工具
+用于查询历史持仓记录。参数说明：
+- limit: 返回记录数量（默认10）
+
+## auto_open_and_track 工具（推荐使用）
+自动开仓并开始跟踪（结合币安API下单+持仓跟踪）。参数说明：
+- symbol: 交易对符号（如：BTCUSDT）
+- side: 交易方向（BUY/做多/买入 或 SELL/做空/卖出）
+- amount: 交易数量或金额（如：0.001或100）
+- order_type: 订单类型（MARKET-市价单 或 LIMIT-限价单，默认MARKET）
+- price: 限价单价格（仅限价单需要，如：90000）
+- leverage: 杠杆倍数（如：1、5、10，默认1）
+- trade_type: 交易类型（spot-现货 或 futures-期货，默认spot）
+- take_profit_price: 止盈价格（可选）
+- stop_loss_price: 止损价格（可选）
+
+## auto_close_and_calc_profit 工具（推荐使用）
+自动平仓并计算收益（结合币安API平仓+持仓记录更新）。参数说明：
+- symbol: 交易对符号（如：BTCUSDT）
+- close_price: 平仓价格（可选，不指定则使用市价平仓）
+- close_reason: 平仓原因（如：止盈平仓、止损平仓、手动平仓）
+- use_market_price: 是否使用市价平仓（默认True）
 
 # 输出格式
 请以 Markdown 格式返回清晰的分析结果，包括：
@@ -287,7 +399,13 @@ def build_agent(ctx=None):
             calculate_profit_loss,
             binance_spot_open_position,
             binance_futures_open_position,
-            binance_get_balance
+            binance_get_balance,
+            open_tracking_position,
+            close_tracking_position,
+            get_open_positions,
+            get_position_history,
+            auto_open_and_track,
+            auto_close_and_calc_profit
         ],
         checkpointer=get_memory_saver(),
         state_schema=AgentState,

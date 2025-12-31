@@ -1,0 +1,24 @@
+{
+  "BTCUSDT-BUY-1767166964": {
+    "position_id": "BTCUSDT-BUY-1767166964",
+    "symbol": "BTCUSDT",
+    "side": "BUY",
+    "quantity": 0.001,
+    "entry_price": 90000.0,
+    "entry_value": 90.0,
+    "trade_type": "spot",
+    "leverage": 1,
+    "take_profit_price": 92000.0,
+    "stop_loss_price": null,
+    "status": "closed",
+    "open_time": "2025-12-31 15:42:44",
+    "close_time": "2025-12-31 15:43:41",
+    "close_price": 92000.0,
+    "close_value": 92.0,
+    "profit_loss": 2.0,
+    "profit_loss_percent": 2.2222222222222223,
+    "close_reason": "止盈平仓",
+    "actual_profit_loss": 2.0,
+    "actual_profit_loss_percent": 2.2222222222222223
+  }
+}
