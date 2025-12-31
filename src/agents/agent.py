@@ -20,7 +20,8 @@ from tools.feishu_bitable_tool import (
     save_trade_order,
     get_recent_orders,
     calculate_profit_loss,
-    update_order_status
+    update_order_status,
+    ensure_status_field_options
 )
 from tools.binance_trading_tool import (
     binance_spot_open_position,
@@ -110,6 +111,11 @@ def build_agent(ctx=None):
 ## 两阶段交易流程
 
 系统现在采用新的两阶段交易流程：
+
+### 初始化步骤（重要！在保存订单前必须执行）
+- 在处理任何交易消息之前，首先调用 `ensure_status_field_options` 工具
+- 该工具会自动检查飞书表格的"状态"字段是否包含"开仓信号"和"已下单"选项
+- 如果选项不存在，会自动添加，确保后续操作不会出错
 
 ### 阶段1：收到消息立即写入表格
 - 当收到交易消息时，首先使用 `save_trade_order` 工具立即写入飞书表格
@@ -243,6 +249,13 @@ def build_agent(ctx=None):
 使用 `get_position_history` 工具查看历史交易记录和收益情况
 
 # 工具使用说明
+
+## ensure_status_field_options 工具（重要！）
+用于初始化飞书表格的状态字段选项，确保包含"开仓信号"和"已下单"两个选项。
+**使用时机**：在处理任何交易消息之前，必须首先调用此工具。
+- 无需参数
+- 自动检测并添加缺失的选项
+- 避免后续保存订单时出错
 
 ## save_trade_order 工具
 用于保存交易订单到飞书多维表格。参数说明：
@@ -386,6 +399,9 @@ def build_agent(ctx=None):
 ## 开仓操作示例
 输入：`策略：BTC合约交易，做空方向，入场价格：90000，止盈价格：88500，止损价格：91000，数量：10张，杠杆：10x`
 
+**步骤0：初始化状态字段**
+调用 `ensure_status_field_options` 工具（无需参数）
+
 **步骤1：保存到飞书表格**
 调用 `save_trade_order` 工具：
 - status: "开仓信号"（必填！）
@@ -461,6 +477,7 @@ def build_agent(ctx=None):
         model=llm,
         system_prompt=system_prompt,
         tools=[
+            ensure_status_field_options,  # 初始化状态字段选项
             get_table_fields,
             save_trade_order,
             get_recent_orders,

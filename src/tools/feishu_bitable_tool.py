@@ -79,6 +79,15 @@ class FeishuBitable:
         )
         return result.get("data", {}).get("items", [])
     
+    def update_field(self, app_token: str, table_id: str, field_id: str, field_config: Dict) -> Dict:
+        """更新字段配置"""
+        result = self._request(
+            "PATCH",
+            f"/bitable/v1/apps/{app_token}/tables/{table_id}/fields/{field_id}",
+            json=field_config
+        )
+        return result
+    
     def has_status_field(self) -> bool:
         """检查表格是否有"状态"字段"""
         try:
@@ -90,6 +99,25 @@ class FeishuBitable:
         except Exception as e:
             logger.warning(f"Failed to check status field: {e}")
             return False
+    
+    def get_status_field(self) -> Optional[Dict]:
+        """获取状态字段的完整信息，包括字段ID和选项"""
+        try:
+            fields = self.list_fields(FEISHU_APP_TOKEN, FEISHU_TABLE_ID)
+            for field in fields:
+                if field.get("field_name") == "状态":
+                    return field
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to get status field: {e}")
+            return None
+    
+    def get_status_field_id(self) -> Optional[str]:
+        """获取状态字段的ID"""
+        status_field = self.get_status_field()
+        if status_field:
+            return status_field.get("field_id")
+        return None
     
     def get_status_field_options(self) -> list:
         """获取状态字段的所有选项值"""
@@ -103,6 +131,74 @@ class FeishuBitable:
         except Exception as e:
             logger.warning(f"Failed to get status field options: {e}")
             return []
+    
+    def ensure_status_options(self, required_options: List[str]) -> Dict:
+        """确保状态字段包含所需的选项，如果没有则添加
+        
+        Args:
+            required_options: 需要的选项列表，如 ["开仓信号", "已下单"]
+        
+        Returns:
+            {"success": bool, "added": List[str], "message": str}
+        """
+        try:
+            status_field = self.get_status_field()
+            if not status_field:
+                return {"success": False, "added": [], "message": "未找到状态字段"}
+            
+            field_id = status_field.get("field_id")
+            property_data = status_field.get("property", {})
+            select_data = property_data.get("select", {})
+            existing_options = select_data.get("options", [])
+            
+            # 获取现有选项的名称
+            existing_names = [opt.get("name") for opt in existing_options]
+            
+            # 找出需要添加的选项
+            options_to_add = []
+            for option_name in required_options:
+                if option_name not in existing_names:
+                    # 生成新的选项ID
+                    import hashlib
+                    option_id = hashlib.md5(option_name.encode()).hexdigest()[:16]
+                    options_to_add.append({
+                        "name": option_name,
+                        "id": option_id
+                    })
+            
+            if not options_to_add:
+                return {"success": True, "added": [], "message": "所有选项已存在"}
+            
+            # 合并新旧选项
+            all_options = existing_options + options_to_add
+            
+            # 更新字段配置
+            update_config = {
+                "field": {
+                    "property": {
+                        "select": {
+                            "options": all_options
+                        }
+                    }
+                }
+            }
+            
+            result = self.update_field(FEISHU_APP_TOKEN, FEISHU_TABLE_ID, field_id, update_config)
+            
+            added_names = [opt["name"] for opt in options_to_add]
+            return {
+                "success": True,
+                "added": added_names,
+                "message": f"成功添加选项：{', '.join(added_names)}"
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to ensure status options: {e}")
+            return {
+                "success": False,
+                "added": [],
+                "message": f"添加选项失败：{str(e)}"
+            }
     
     def add_records(
         self, 
@@ -151,25 +247,77 @@ FEISHU_TABLE_ID = "tbltsL5mQlzsBTWm"
 @tool
 def get_table_fields(runtime=None) -> str:
     """
-    获取飞书多维表格的字段信息
+    获取飞书多维表格的字段信息，包括状态字段的选项
     
     Returns:
-        字段信息的JSON字符串
+        字段信息的JSON字符串，包括字段名、类型、选项等详细信息
     """
     try:
         fields = _feishu_client.list_fields(FEISHU_APP_TOKEN, FEISHU_TABLE_ID)
         field_info = []
         for field in fields:
-            field_info.append({
+            info = {
                 "field_name": field.get("field_name"),
                 "field_id": field.get("field_id"),
                 "type": field.get("type")
-            })
+            }
+            
+            # 如果是单选或多选字段，获取选项
+            if field.get("type") in [3, 4]:  # 3=单选, 4=多选
+                property_data = field.get("property", {})
+                select_data = property_data.get("select", {})
+                options = select_data.get("options", [])
+                if options:
+                    info["options"] = [opt.get("name") for opt in options]
+            
+            field_info.append(info)
         
         logger.info(f"Got {len(field_info)} fields from table")
-        return f"Table fields: {field_info}"
+        
+        # 格式化输出
+        output = "飞书多维表格字段结构：\n\n"
+        for field in field_info:
+            output += f"字段名：{field['field_name']}\n"
+            output += f"  类型：{field['type']}\n"
+            if "options" in field:
+                output += f"  选项：{', '.join(field['options'])}\n"
+            output += "\n"
+        
+        return output
     except Exception as e:
         error_msg = f"Failed to get table fields: {str(e)}"
+        logger.error(error_msg)
+        return error_msg
+
+
+@tool
+def ensure_status_field_options(runtime=None) -> str:
+    """
+    确保飞书表格的状态字段包含所需的选项（开仓信号、已下单）
+    如果选项不存在，则自动添加
+    
+    Returns:
+        操作结果
+    """
+    try:
+        result = _feishu_client.ensure_status_options(["开仓信号", "已下单"])
+        
+        if result["success"]:
+            if result["added"]:
+                message = f"✅ 成功初始化状态字段选项：{', '.join(result['added'])}"
+                logger.info(message)
+                return message
+            else:
+                message = "✅ 状态字段选项已全部存在（开仓信号、已下单）"
+                logger.info(message)
+                return message
+        else:
+            message = f"❌ 初始化状态字段选项失败：{result['message']}"
+            logger.error(message)
+            return message
+            
+    except Exception as e:
+        error_msg = f"❌ ensure_status_field_options error: {str(e)}"
         logger.error(error_msg)
         return error_msg
 
@@ -768,81 +916,66 @@ def update_order_status(record_id: str, status: str, order_id: str = "", entry_p
         更新结果
     """
     try:
-        # 检查是否有"状态"字段
-        has_status = _feishu_client.has_status_field()
+        # 获取状态字段的完整信息
+        status_field = _feishu_client.get_status_field()
         
         # 构建更新字段
         fields = {}
         
-        if has_status:
-            # 如果有状态字段，直接更新
-            fields["状态"] = status
-        else:
-            # 如果没有状态字段，更新信息内容字段
-            # 获取当前记录
-            result = _feishu_client._request(
-                "GET",
-                f"/bitable/v1/apps/{FEISHU_APP_TOKEN}/tables/{FEISHU_TABLE_ID}/records/{record_id}"
-            )
-            current_fields = result.get("data", {}).get("fields", {})
-            current_info = current_fields.get("信息内容", "")
+        # 默认策略：始终在信息内容字段中添加状态标记
+        # 这样可以确保状态信息被记录，即使状态字段有问题
+        current_info = _get_record_info_content(record_id)
+        current_info = _add_status_prefix(current_info, status)
+        fields["信息内容"] = current_info
+        
+        # 尝试更新状态字段（如果存在且类型正确）
+        if status_field:
+            field_type = status_field.get("type")
+            field_name = status_field.get("field_name")
             
-            # 更新状态标记在信息内容前面
-            # 移除旧的状态标记
-            import re
-            current_info = re.sub(r'^【[^\n]+】\n', '', current_info)
-            
-            # 添加新的状态标记
-            current_info = f"【{status}】\n{current_info}"
-            
-            fields["信息内容"] = current_info
+            try:
+                if field_type == 3:  # 单选类型
+                    # 单选类型，需要检查选项是否存在
+                    status_options = status_field.get("property", {}).get("select", {}).get("options", [])
+                    existing_options = [opt.get("name") for opt in status_options]
+                    
+                    if status in existing_options:
+                        # 选项存在，尝试更新状态字段
+                        fields[field_name] = status
+                        logger.info(f"Updated status field (select type) to: {status}")
+                    else:
+                        logger.warning(f"Status value '{status}' not in options: {existing_options}")
+                elif field_type == 1:  # 文本类型
+                    # 文本类型，尝试更新状态字段
+                    fields[field_name] = status
+                    logger.info(f"Updated status field (text type) to: {status}")
+            except Exception as status_field_error:
+                # 更新状态字段失败，忽略错误（信息内容已经更新）
+                logger.warning(f"Failed to update status field, but info content updated: {status_field_error}")
         
         # 如果提供了订单ID、开仓价格或持仓数量，更新信息内容
         if order_id or entry_price or position_size:
-            # 获取当前记录（如果之前没有获取过）
-            result = _feishu_client._request(
-                "GET",
-                f"/bitable/v1/apps/{FEISHU_APP_TOKEN}/tables/{FEISHU_TABLE_ID}/records/{record_id}"
-            )
-            current_fields = result.get("data", {}).get("fields", {})
-            current_info = current_fields.get("信息内容", "")
-            
-            # 如果之前已经添加了状态标记，需要保留
-            if not has_status and "信息内容" in fields:
-                # 已经在上面处理了，使用处理后的内容
-                current_info = fields["信息内容"]
+            # 获取当前记录的信息内容（已经被上面更新过了）
+            current_info = fields["信息内容"]
             
             # 更新信息内容中的订单ID
             if order_id and "订单ID：" not in current_info:
-                # 在状态标记之后添加
-                lines = current_info.split('\n', 1)
-                if len(lines) == 2:
-                    current_info = f"{lines[0]}\n订单ID：{order_id}\n{lines[1]}"
-                else:
-                    current_info = f"订单ID：{order_id}\n{current_info}"
+                current_info = _add_order_id(current_info, order_id)
             
             # 更新实际开仓价格
             if entry_price:
-                if "实际开仓价格" not in current_info:
-                    current_info = f"{current_info}\n实际开仓价格：{entry_price}"
-                else:
-                    # 替换现有的实际开仓价格
-                    import re
-                    current_info = re.sub(r'实际开仓价格[：:]\s*[^\n]+', f'实际开仓价格：{entry_price}', current_info)
-                
+                current_info = _update_entry_price(current_info, entry_price)
                 # 同时更新入场价格字段
                 fields["入场价格"] = entry_price
             
             # 更新实际持仓数量
             if position_size:
-                if "实际持仓数量" not in current_info:
-                    current_info = f"{current_info}\n实际持仓数量：{position_size}"
-                else:
-                    # 替换现有的实际持仓数量
-                    import re
-                    current_info = re.sub(r'实际持仓数量[：:]\s*[^\n]+', f'实际持仓数量：{position_size}', current_info)
+                current_info = _update_position_size(current_info, position_size)
             
             fields["信息内容"] = current_info
+        
+        # 打印调试信息
+        logger.info(f"Updating record {record_id} with fields: {fields}")
         
         # 更新记录
         update_result = _feishu_client._request(
@@ -856,63 +989,62 @@ def update_order_status(record_id: str, status: str, order_id: str = "", entry_p
     except Exception as e:
         error_msg = f"Failed to update order status: {str(e)}"
         logger.error(error_msg)
-
-        # 如果是字段错误（Extra data），尝试只在信息内容中更新
-        if "Extra data" in str(e) or "FieldNameNotFound" in str(e):
-            try:
-                logger.info(f"Status field update failed ({str(e)[:50]}), updating info content instead...")
-
-                # 获取当前记录
-                result = _feishu_client._request(
-                    "GET",
-                    f"/bitable/v1/apps/{FEISHU_APP_TOKEN}/tables/{FEISHU_TABLE_ID}/records/{record_id}"
-                )
-                current_fields = result.get("data", {}).get("fields", {})
-                current_info = current_fields.get("信息内容", "")
-
-                # 更新状态标记在信息内容前面
-                # 移除旧的状态标记
-                import re
-                current_info = re.sub(r'^【[^\n]+】\n', '', current_info)
-
-                # 添加新的状态标记
-                current_info = f"【{status}】\n{current_info}"
-
-                # 如果提供了订单ID、开仓价格或持仓数量，继续更新
-                if order_id or entry_price or position_size:
-                    # 更新信息内容中的订单ID
-                    if order_id and "订单ID：" not in current_info:
-                        lines = current_info.split('\n', 1)
-                        if len(lines) == 2:
-                            current_info = f"{lines[0]}\n订单ID：{order_id}\n{lines[1]}"
-                        else:
-                            current_info = f"订单ID：{order_id}\n{current_info}"
-
-                    # 更新实际开仓价格
-                    if entry_price:
-                        if "实际开仓价格" not in current_info:
-                            current_info = f"{current_info}\n实际开仓价格：{entry_price}"
-                        else:
-                            current_info = re.sub(r'实际开仓价格[：:]\s*[^\n]+', f'实际开仓价格：{entry_price}', current_info)
-
-                    # 更新实际持仓数量
-                    if position_size:
-                        if "实际持仓数量" not in current_info:
-                            current_info = f"{current_info}\n实际持仓数量：{position_size}"
-                        else:
-                            current_info = re.sub(r'实际持仓数量[：:]\s*[^\n]+', f'实际持仓数量：{position_size}', current_info)
-
-                # 更新记录
-                update_result = _feishu_client._request(
-                    "PATCH",
-                    f"/bitable/v1/apps/{FEISHU_APP_TOKEN}/tables/{FEISHU_TABLE_ID}/records/{record_id}",
-                    json={"fields": {"信息内容": current_info}}
-                )
-
-                logger.info(f"Successfully updated record {record_id} info content with status: {status}")
-                return f"Successfully updated order status (in info content) to {status}" + (f" with order_id: {order_id}" if order_id else "")
-            except Exception as retry_error:
-                logger.error(f"Retry also failed: {retry_error}")
-                return f"Failed to update order status (both attempts failed): {str(e)}"
-
         return error_msg
+
+
+def _get_record_info_content(record_id: str) -> str:
+    """获取记录的信息内容"""
+    try:
+        result = _feishu_client._request(
+            "GET",
+            f"/bitable/v1/apps/{FEISHU_APP_TOKEN}/tables/{FEISHU_TABLE_ID}/records/{record_id}"
+        )
+        current_fields = result.get("data", {}).get("fields", {})
+        info_content = current_fields.get("信息内容", "")
+        
+        # 处理列表格式
+        if isinstance(info_content, list):
+            info_content = str(info_content[0]) if len(info_content) > 0 else ""
+        
+        return info_content
+    except Exception as e:
+        logger.error(f"Failed to get record info content: {e}")
+        return ""
+
+
+def _add_status_prefix(info_content: str, status: str) -> str:
+    """添加状态前缀到信息内容"""
+    import re
+    # 移除旧的状态标记
+    info_content = re.sub(r'^【[^\n]+】\n', '', info_content)
+    # 添加新的状态标记
+    return f"【{status}】\n{info_content}"
+
+
+def _add_order_id(info_content: str, order_id: str) -> str:
+    """添加订单ID到信息内容"""
+    lines = info_content.split('\n', 1)
+    if len(lines) == 2:
+        return f"{lines[0]}\n订单ID：{order_id}\n{lines[1]}"
+    else:
+        return f"订单ID：{order_id}\n{info_content}"
+
+
+def _update_entry_price(info_content: str, entry_price: str) -> str:
+    """更新实际开仓价格"""
+    import re
+    if "实际开仓价格" not in info_content:
+        return f"{info_content}\n实际开仓价格：{entry_price}"
+    else:
+        # 替换现有的实际开仓价格
+        return re.sub(r'实际开仓价格[：:]\s*[^\n]+', f'实际开仓价格：{entry_price}', info_content)
+
+
+def _update_position_size(info_content: str, position_size: str) -> str:
+    """更新实际持仓数量"""
+    import re
+    if "实际持仓数量" not in info_content:
+        return f"{info_content}\n实际持仓数量：{position_size}"
+    else:
+        # 替换现有的实际持仓数量
+        return re.sub(r'实际持仓数量[：:]\s*[^\n]+', f'实际持仓数量：{position_size}', info_content)
