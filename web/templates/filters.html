@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}过滤规则 - Webhook 配置管理系统{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-funnel"></i> 过滤规则配置</h2>
+</div>
+
+<!-- 排除关键词 -->
+<div class="card mb-4">
+    <div class="card-header">
+        <i class="bi bi-x-circle"></i> 排除关键词
+        <span class="badge bg-secondary ms-2">{{ config.filter_rules.exclude_keywords|length }} 个</span>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> 包含这些关键词的消息将被过滤（营销、广告等）
+        </div>
+        
+        <div id="excludeKeywordsContainer" class="mb-3">
+            {% for keyword in config.filter_rules.exclude_keywords %}
+            <span class="keyword-tag" data-keyword="{{ keyword }}">
+                {{ keyword }}
+                <span class="remove-btn" onclick="removeKeyword('exclude', '{{ keyword }}')">&times;</span>
+            </span>
+            {% endfor %}
+        </div>
+        
+        <div class="input-group">
+            <input type="text" class="form-control" id="excludeKeywordInput" placeholder="输入排除关键词">
+            <button class="btn btn-outline-primary" type="button" onclick="addKeyword('exclude')">
+                <i class="bi bi-plus"></i> 添加
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 交易关键词 -->
+<div class="card mb-4">
+    <div class="card-header">
+        <i class="bi bi-currency-dollar"></i> 交易关键词
+        <span class="badge bg-primary ms-2">{{ config.filter_rules.trading_keywords|length }} 个</span>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i> 至少包含 <strong>2 个</strong>这些关键词的消息才会被识别为交易消息
+        </div>
+        
+        <div id="tradingKeywordsContainer" class="mb-3">
+            {% for keyword in config.filter_rules.trading_keywords %}
+            <span class="keyword-tag" data-keyword="{{ keyword }}">
+                {{ keyword }}
+                <span class="remove-btn" onclick="removeKeyword('trading', '{{ keyword }}')">&times;</span>
+            </span>
+            {% endfor %}
+        </div>
+        
+        <div class="input-group">
+            <input type="text" class="form-control" id="tradingKeywordInput" placeholder="输入交易关键词">
+            <button class="btn btn-outline-primary" type="button" onclick="addKeyword('trading')">
+                <i class="bi bi-plus"></i> 添加
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 排除模式 -->
+<div class="card">
+    <div class="card-header">
+        <i class="bi bi-shield-x"></i> 排除模式
+        <span class="badge bg-info ms-2">{{ config.filter_rules.exclude_patterns|length }} 个</span>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> 匹配这些模式的消息将被过滤（分析、免责声明等）
+        </div>
+        
+        <div id="excludePatternsContainer" class="mb-3">
+            {% for pattern in config.filter_rules.exclude_patterns %}
+            <span class="keyword-tag" data-pattern="{{ pattern }}">
+                {{ pattern }}
+                <span class="remove-btn" onclick="removePattern('{{ pattern }}')">&times;</span>
+            </span>
+            {% endfor %}
+        </div>
+        
+        <div class="input-group">
+            <input type="text" class="form-control" id="excludePatternInput" placeholder="输入排除模式">
+            <button class="btn btn-outline-primary" type="button" onclick="addPattern()">
+                <i class="bi bi-plus"></i> 添加
+            </button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 添加排除关键词
+async function addKeyword(type) {
+    const inputId = type === 'exclude' ? 'excludeKeywordInput' : 'tradingKeywordInput';
+    const input = document.getElementById(inputId);
+    const keyword = input.value.trim();
+    
+    if (!keyword) {
+        showAlert('请输入关键词', 'danger');
+        return;
+    }
+    
+    const config = await apiRequest('/api/config');
+    
+    if (type === 'exclude') {
+        if (config.filter_rules.exclude_keywords.includes(keyword)) {
+            showAlert('关键词已存在', 'warning');
+            return;
+        }
+        config.filter_rules.exclude_keywords.push(keyword);
+    } else {
+        if (config.filter_rules.trading_keywords.includes(keyword)) {
+            showAlert('关键词已存在', 'warning');
+            return;
+        }
+        config.filter_rules.trading_keywords.push(keyword);
+    }
+    
+    try {
+        await apiRequest('/api/filters', {
+            method: 'POST',
+            body: JSON.stringify(config.filter_rules)
+        });
+        
+        showAlert('关键词添加成功', 'success');
+        input.value = '';
+        setTimeout(() => location.reload(), 500);
+    } catch (error) {
+        console.error('Error adding keyword:', error);
+    }
+}
+
+// 删除排除关键词
+async function removeKeyword(type, keyword) {
+    const config = await apiRequest('/api/config');
+    
+    if (type === 'exclude') {
+        config.filter_rules.exclude_keywords = config.filter_rules.exclude_keywords.filter(k => k !== keyword);
+    } else {
+        config.filter_rules.trading_keywords = config.filter_rules.trading_keywords.filter(k => k !== keyword);
+    }
+    
+    try {
+        await apiRequest('/api/filters', {
+            method: 'POST',
+            body: JSON.stringify(config.filter_rules)
+        });
+        
+        showAlert('关键词删除成功', 'success');
+        setTimeout(() => location.reload(), 500);
+    } catch (error) {
+        console.error('Error removing keyword:', error);
+    }
+}
+
+// 添加排除模式
+async function addPattern() {
+    const input = document.getElementById('excludePatternInput');
+    const pattern = input.value.trim();
+    
+    if (!pattern) {
+        showAlert('请输入排除模式', 'danger');
+        return;
+    }
+    
+    const config = await apiRequest('/api/config');
+    
+    if (config.filter_rules.exclude_patterns.includes(pattern)) {
+        showAlert('模式已存在', 'warning');
+        return;
+    }
+    
+    config.filter_rules.exclude_patterns.push(pattern);
+    
+    try {
+        await apiRequest('/api/filters', {
+            method: 'POST',
+            body: JSON.stringify(config.filter_rules)
+        });
+        
+        showAlert('模式添加成功', 'success');
+        input.value = '';
+        setTimeout(() => location.reload(), 500);
+    } catch (error) {
+        console.error('Error adding pattern:', error);
+    }
+}
+
+// 删除排除模式
+async function removePattern(pattern) {
+    const config = await apiRequest('/api/config');
+    config.filter_rules.exclude_patterns = config.filter_rules.exclude_patterns.filter(p => p !== pattern);
+    
+    try {
+        await apiRequest('/api/filters', {
+            method: 'POST',
+            body: JSON.stringify(config.filter_rules)
+        });
+        
+        showAlert('模式删除成功', 'success');
+        setTimeout(() => location.reload(), 500);
+    } catch (error) {
+        console.error('Error removing pattern:', error);
+    }
+}
+
+// 回车键触发添加
+document.getElementById('excludeKeywordInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') addKeyword('exclude');
+});
+
+document.getElementById('tradingKeywordInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') addKeyword('trading');
+});
+
+document.getElementById('excludePatternInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') addPattern();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}消息处理 - Webhook 配置管理系统{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-gear"></i> 消息处理配置</h2>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        处理选项
+    </div>
+    <div class="card-body">
+        <form id="processingForm">
+            <!-- 启用消息过滤 -->
+            <div class="form-check form-switch mb-4">
+                <input class="form-check-input" type="checkbox" id="enableFilter" role="switch"
+                    {% if config.message_processing.enable_filter %}checked{% endif %}>
+                <label class="form-check-label" for="enableFilter">
+                    <strong>启用消息过滤</strong>
+                    <div class="form-text">根据过滤规则过滤非交易消息</div>
+                </label>
+            </div>
+            
+            <!-- 启用 Agent 分析 -->
+            <div class="form-check form-switch mb-4">
+                <input class="form-check-input" type="checkbox" id="enableAgentAnalysis" role="switch"
+                    {% if config.message_processing.enable_agent_analysis %}checked{% endif %}>
+                <label class="form-check-label" for="enableAgentAnalysis">
+                    <strong>启用 Agent 分析</strong>
+                    <div class="form-text">使用 AI Agent 分析交易消息并提取交易信号</div>
+                </label>
+            </div>
+            
+            <!-- 自动交易 -->
+            <div class="form-check form-switch mb-4">
+                <input class="form-check-input" type="checkbox" id="autoTrade" role="switch"
+                    {% if config.message_processing.auto_trade %}checked{% endif %}>
+                <label class="form-check-label" for="autoTrade">
+                    <strong>自动交易</strong> <span class="badge bg-danger">慎用</span>
+                    <div class="form-text">自动执行交易操作（需要配置币安 API）</div>
+                </label>
+            </div>
+            
+            <!-- 保存到飞书多维表格 -->
+            <div class="form-check form-switch mb-4">
+                <input class="form-check-input" type="checkbox" id="saveToBitable" role="switch"
+                    {% if config.message_processing.save_to_bitable %}checked{% endif %}>
+                <label class="form-check-label" for="saveToBitable">
+                    <strong>保存到飞书多维表格</strong>
+                    <div class="form-text">将交易记录自动保存到飞书多维表格</div>
+                </label>
+            </div>
+            
+            <!-- 记录所有消息日志 -->
+            <div class="form-check form-switch mb-4">
+                <input class="form-check-input" type="checkbox" id="logAllMessages" role="switch"
+                    {% if config.message_processing.log_all_messages %}checked{% endif %}>
+                <label class="form-check-label" for="logAllMessages">
+                    <strong>记录所有消息日志</strong>
+                    <div class="form-text">记录所有接收到的消息（包括被过滤的）</div>
+                </label>
+            </div>
+            
+            <hr>
+            
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle"></i> <strong>警告：</strong>
+                <ul class="mb-0 mt-2">
+                    <li>启用"自动交易"前，请确保已正确配置币安 API 密钥</li>
+                    <li>建议先在测试环境验证配置，再在生产环境使用</li>
+                    <li>修改配置后可能需要重启服务才能生效</li>
+                </ul>
+            </div>
+            
+            <button type="button" class="btn btn-primary" onclick="saveProcessingConfig()">
+                <i class="bi bi-save"></i> 保存配置
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- 配置预览 -->
+<div class="card mt-4">
+    <div class="card-header">
+        <i class="bi bi-eye"></i> 配置预览
+    </div>
+    <div class="card-body">
+        <pre><code>{
+  "message_processing": {
+    "enable_filter": {{ config.message_processing.enable_filter|lower }},
+    "enable_agent_analysis": {{ config.message_processing.enable_agent_analysis|lower }},
+    "auto_trade": {{ config.message_processing.auto_trade|lower }},
+    "save_to_bitable": {{ config.message_processing.save_to_bitable|lower }},
+    "log_all_messages": {{ config.message_processing.log_all_messages|lower }}
+  }
+}</code></pre>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function saveProcessingConfig() {
+    const processingData = {
+        enable_filter: document.getElementById('enableFilter').checked,
+        enable_agent_analysis: document.getElementById('enableAgentAnalysis').checked,
+        auto_trade: document.getElementById('autoTrade').checked,
+        save_to_bitable: document.getElementById('saveToBitable').checked,
+        log_all_messages: document.getElementById('logAllMessages').checked
+    };
+    
+    if (processingData.auto_trade) {
+        confirm('您启用了自动交易功能，这可能会造成资金损失。确定要继续吗？', async () => {
+            await doSaveProcessing(processingData);
+        });
+    } else {
+        await doSaveProcessing(processingData);
+    }
+}
+
+async function doSaveProcessing(processingData) {
+    try {
+        await apiRequest('/api/processing', {
+            method: 'POST',
+            body: JSON.stringify(processingData)
+        });
+        
+        showAlert('消息处理配置保存成功', 'success');
+    } catch (error) {
+        console.error('Error saving processing config:', error);
+    }
+}
+</script>
+{% endblock %}

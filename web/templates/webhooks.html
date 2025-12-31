@@ -1,0 +1,330 @@
+{% extends "base.html" %}
+
+{% block title %}Webhook 配置 - Webhook 配置管理系统{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-link-45deg"></i> Webhook 配置</h2>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addWebhookModal">
+        <i class="bi bi-plus"></i> 添加 Webhook
+    </button>
+</div>
+
+<!-- Webhook 列表 -->
+<div class="card">
+    <div class="card-header">
+        Webhook 端点列表
+    </div>
+    <div class="card-body">
+        {% if config.webhooks %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>名称</th>
+                        <th>ID</th>
+                        <th>URL 路径</th>
+                        <th>来源</th>
+                        <th>描述</th>
+                        <th>状态</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for webhook in config.webhooks %}
+                    <tr>
+                        <td><strong>{{ webhook.name }}</strong></td>
+                        <td><code>{{ webhook.id }}</code></td>
+                        <td><code>{{ webhook.url_path }}</code></td>
+                        <td>{{ webhook.source }}</td>
+                        <td>{{ webhook.description or '-' }}</td>
+                        <td>
+                            {% if webhook.enabled %}
+                                <span class="badge bg-success">已启用</span>
+                            {% else %}
+                                <span class="badge bg-secondary">已禁用</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" onclick="editWebhook('{{ webhook.id }}')">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-success" onclick="toggleWebhook('{{ webhook.id }}')">
+                                <i class="bi bi-arrow-repeat"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteWebhook('{{ webhook.id }}')">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-inbox" style="font-size: 4rem; color: #dee2e6;"></i>
+            <p class="mt-3 text-muted">暂无 Webhook 配置</p>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addWebhookModal">
+                <i class="bi bi-plus"></i> 添加第一个 Webhook
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 添加 Webhook 模态框 -->
+<div class="modal fade" id="addWebhookModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">添加 Webhook</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addWebhookForm">
+                    <div class="mb-3">
+                        <label class="form-label">Webhook ID *</label>
+                        <input type="text" class="form-control" id="webhookId" placeholder="如: webhook_001" required>
+                        <div class="form-text">唯一标识符，创建后不可修改</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Webhook 名称 *</label>
+                        <input type="text" class="form-control" id="webhookName" placeholder="如: 飞书交易信号Webhook" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">URL 路径 *</label>
+                        <input type="text" class="form-control" id="webhookUrlPath" placeholder="如: /webhook/trading" required>
+                        <div class="form-text">接收消息的路径</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">消息来源 *</label>
+                        <select class="form-select" id="webhookSource" required>
+                            <option value="feishu">飞书</option>
+                            <option value="telegram">Telegram</option>
+                            <option value="wechat">微信</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-control" id="webhookDescription" rows="2" placeholder="描述此 Webhook 的用途"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">验证令牌（可选）</label>
+                        <input type="text" class="form-control" id="webhookToken" placeholder="安全验证令牌">
+                        <div class="form-text">用于验证请求来源</div>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="webhookEnabled" checked>
+                        <label class="form-check-label" for="webhookEnabled">
+                            启用此 Webhook
+                        </label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveWebhook()">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑 Webhook 模态框 -->
+<div class="modal fade" id="editWebhookModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">编辑 Webhook</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editWebhookForm">
+                    <input type="hidden" id="editWebhookId">
+                    <div class="mb-3">
+                        <label class="form-label">Webhook ID</label>
+                        <input type="text" class="form-control" id="editWebhookIdDisplay" disabled>
+                        <div class="form-text">ID 不可修改</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Webhook 名称 *</label>
+                        <input type="text" class="form-control" id="editWebhookName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">URL 路径 *</label>
+                        <input type="text" class="form-control" id="editWebhookUrlPath" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">消息来源 *</label>
+                        <select class="form-select" id="editWebhookSource" required>
+                            <option value="feishu">飞书</option>
+                            <option value="telegram">Telegram</option>
+                            <option value="wechat">微信</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">描述</label>
+                        <textarea class="form-control" id="editWebhookDescription" rows="2"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">验证令牌（可选）</label>
+                        <input type="text" class="form-control" id="editWebhookToken">
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="editWebhookEnabled">
+                        <label class="form-check-label" for="editWebhookEnabled">
+                            启用此 Webhook
+                        </label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="updateWebhook()">更新</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 添加 Webhook
+async function saveWebhook() {
+    const webhookData = {
+        id: document.getElementById('webhookId').value.trim(),
+        name: document.getElementById('webhookName').value.trim(),
+        url_path: document.getElementById('webhookUrlPath').value.trim(),
+        source: document.getElementById('webhookSource').value,
+        description: document.getElementById('webhookDescription').value.trim(),
+        verification_token: document.getElementById('webhookToken').value.trim(),
+        enabled: document.getElementById('webhookEnabled').checked
+    };
+    
+    if (!webhookData.id || !webhookData.name || !webhookData.url_path) {
+        showAlert('请填写所有必填字段', 'danger');
+        return;
+    }
+    
+    try {
+        await apiRequest('/api/webhook', {
+            method: 'POST',
+            body: JSON.stringify(webhookData)
+        });
+        
+        showAlert('Webhook 添加成功', 'success');
+        
+        // 关闭模态框
+        const modal = bootstrap.Modal.getInstance(document.getElementById('addWebhookModal'));
+        modal.hide();
+        
+        // 刷新页面
+        setTimeout(() => location.reload(), 500);
+    } catch (error) {
+        console.error('Error adding webhook:', error);
+    }
+}
+
+// 编辑 Webhook
+async function editWebhook(webhookId) {
+    try {
+        const config = await apiRequest('/api/config');
+        const webhook = config.webhooks.find(w => w.id === webhookId);
+        
+        if (!webhook) {
+            showAlert('Webhook 不存在', 'danger');
+            return;
+        }
+        
+        // 填充表单
+        document.getElementById('editWebhookId').value = webhook.id;
+        document.getElementById('editWebhookIdDisplay').value = webhook.id;
+        document.getElementById('editWebhookName').value = webhook.name;
+        document.getElementById('editWebhookUrlPath').value = webhook.url_path;
+        document.getElementById('editWebhookSource').value = webhook.source;
+        document.getElementById('editWebhookDescription').value = webhook.description || '';
+        document.getElementById('editWebhookToken').value = webhook.verification_token || '';
+        document.getElementById('editWebhookEnabled').checked = webhook.enabled;
+        
+        // 显示模态框
+        const modal = new bootstrap.Modal(document.getElementById('editWebhookModal'));
+        modal.show();
+    } catch (error) {
+        console.error('Error loading webhook:', error);
+    }
+}
+
+// 更新 Webhook
+async function updateWebhook() {
+    const webhookId = document.getElementById('editWebhookId').value;
+    const webhookData = {
+        name: document.getElementById('editWebhookName').value.trim(),
+        url_path: document.getElementById('editWebhookUrlPath').value.trim(),
+        source: document.getElementById('editWebhookSource').value,
+        description: document.getElementById('editWebhookDescription').value.trim(),
+        verification_token: document.getElementById('editWebhookToken').value.trim(),
+        enabled: document.getElementById('editWebhookEnabled').checked
+    };
+    
+    if (!webhookData.name || !webhookData.url_path) {
+        showAlert('请填写所有必填字段', 'danger');
+        return;
+    }
+    
+    try {
+        await apiRequest(`/api/webhook/${webhookId}`, {
+            method: 'PUT',
+            body: JSON.stringify(webhookData)
+        });
+        
+        showAlert('Webhook 更新成功', 'success');
+        
+        // 关闭模态框
+        const modal = bootstrap.Modal.getInstance(document.getElementById('editWebhookModal'));
+        modal.hide();
+        
+        // 刷新页面
+        setTimeout(() => location.reload(), 500);
+    } catch (error) {
+        console.error('Error updating webhook:', error);
+    }
+}
+
+// 切换 Webhook 状态
+async function toggleWebhook(webhookId) {
+    try {
+        const result = await apiRequest(`/api/webhook/${webhookId}/toggle`, {
+            method: 'POST'
+        });
+        
+        showAlert(`Webhook 已${result.enabled ? '启用' : '禁用'}`, 'success');
+        
+        // 刷新页面
+        setTimeout(() => location.reload(), 500);
+    } catch (error) {
+        console.error('Error toggling webhook:', error);
+    }
+}
+
+// 删除 Webhook
+async function deleteWebhook(webhookId) {
+    confirm('确定要删除这个 Webhook 吗？', async () => {
+        try {
+            await apiRequest(`/api/webhook/${webhookId}`, {
+                method: 'DELETE'
+            });
+            
+            showAlert('Webhook 删除成功', 'success');
+            
+            // 刷新页面
+            setTimeout(() => location.reload(), 500);
+        } catch (error) {
+            console.error('Error deleting webhook:', error);
+        }
+    });
+}
+</script>
+{% endblock %}

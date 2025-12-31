@@ -10,6 +10,7 @@
 - 📈 **数据分析**: 分析历史交易数据，生成统计报告和交易建议
 - 🔗 **长连接监听**: 无需公网 IP，使用飞书 SDK 长连接模式接收消息
 - 📝 **完整日志**: 详细的运行日志，便于调试和监控
+- 🌐 **可视化配置**: 提供友好的 Web 界面，轻松配置和管理系统
 
 ---
 
@@ -134,6 +135,30 @@ python src/main_multiagent.py
 python src/webhook_server.py
 ```
 
+### 5. 启动 Web UI 配置管理系统（推荐）
+
+```bash
+# 使用启动脚本（Linux/Mac）
+./scripts/start_web_ui.sh
+
+# 或使用启动脚本（Windows）
+scripts\start_web_ui.bat
+
+# 或直接运行
+python src/web_ui.py
+```
+
+然后在浏览器中访问：`http://localhost:5000`
+
+**Web UI 功能：**
+- 🎛️ **仪表板**：系统概览和快速操作
+- 🔗 **Webhook 管理**：添加/编辑/删除 Webhook 端点
+- ⚙️ **服务器配置**：配置监听地址、端口、工作进程
+- 🎯 **过滤规则**：管理排除关键词、交易关键词、排除模式
+- 🤖 **消息处理**：配置消息过滤、Agent 分析、自动交易等选项
+
+详细说明请参考：[Web UI 使用指南](docs/WEB_UI_GUIDE.md)
+
 ---
 
 ## 📖 详细文档
@@ -141,6 +166,7 @@ python src/webhook_server.py
 - **[多 Agent 系统指南](docs/MULTI_AGENT_GUIDE.md)**: 详细介绍多 Agent 架构、各 Agent 功能和使用方法
 - **[配置指南](docs/SETUP_GUIDE.md)**: 完整的飞书应用和多维表格配置说明
 - **[Webhook 配置指南](docs/WEBHOOK_CONFIG_GUIDE.md)**: Webhook 服务器的交互式配置向导使用说明
+- **[Web UI 使用指南](docs/WEB_UI_GUIDE.md)**: Web 可视化配置界面的完整使用说明
 
 ---
 
