@@ -91,6 +91,19 @@ class FeishuBitable:
             logger.warning(f"Failed to check status field: {e}")
             return False
     
+    def get_status_field_options(self) -> list:
+        """获取状态字段的所有选项值"""
+        try:
+            fields = self.list_fields(FEISHU_APP_TOKEN, FEISHU_TABLE_ID)
+            for field in fields:
+                if field.get("field_name") == "状态":
+                    # 单选字段，获取选项列表
+                    return field.get("property", {}).get("select", {}).get("options", [])
+            return []
+        except Exception as e:
+            logger.warning(f"Failed to get status field options: {e}")
+            return []
+    
     def add_records(
         self, 
         app_token: str, 
@@ -209,6 +222,9 @@ def save_trade_order(
     Returns:
         保存结果
     """
+    # 先检查是否有状态字段
+    has_status = _feishu_client.has_status_field()
+    
     try:
         # 构建记录数据，字段名与飞书表格实际字段匹配
         # 先构建信息内容，将所有附加信息收集起来
@@ -271,8 +287,24 @@ def save_trade_order(
         # 检查是否有"状态"字段
         has_status = _feishu_client.has_status_field()
         if has_status:
-            # 如果有状态字段，直接写入
-            record["fields"]["状态"] = status
+            # 获取状态字段的所有选项
+            status_options = _feishu_client.get_status_field_options()
+            
+            # 检查状态值是否在选项列表中
+            valid_status = None
+            for option in status_options:
+                if option.get("name") == status:
+                    valid_status = status
+                    break
+            
+            if valid_status:
+                # 如果状态值有效，直接写入
+                record["fields"]["状态"] = status
+            else:
+                # 如果状态值不在选项中，将状态信息添加到信息内容前面
+                logger.warning(f"Status value '{status}' not in options: {[o.get('name') for o in status_options]}")
+                status_prefix = f"【{status}】\n"
+                record["fields"]["信息内容"] = status_prefix + info_content
         else:
             # 如果没有状态字段，将状态信息添加到信息内容前面
             status_prefix = f"【{status}】\n"
@@ -315,6 +347,55 @@ def save_trade_order(
     except Exception as e:
         error_msg = f"Failed to save trade order: {str(e)}"
         logger.error(error_msg)
+
+        # 如果是字段错误（FieldNameNotFound或Extra data），尝试重新构建不包含状态字段的记录
+        if ("FieldNameNotFound" in str(e) or "Extra data" in str(e)) and has_status:
+            try:
+                logger.info(f"Status field write failed ({str(e)[:50]}), retrying without status field...")
+                retry_record = {
+                    "fields": {
+                        "订单类型": order_type,
+                        "开仓方向": direction,
+                        "入场价格": entry_amount,
+                        "止盈价格": take_profit,
+                        "信息内容": f"【{status}】\n{info_content}",
+                        "群名": group_name
+                    }
+                }
+
+                # 如果提供了币种信息，则添加
+                if coin_info:
+                    retry_record["fields"]["币种信息"] = coin_info
+
+                # 根据操作类型调整其他字段
+                if operation_type == "补仓":
+                    retry_record["fields"]["止盈价格"] = f"补仓：{take_profit}" if take_profit else ""
+                elif operation_type == "离场":
+                    if not entry_amount:
+                        retry_record["fields"]["入场价格"] = "-"
+                    if exit_price and not take_profit:
+                        retry_record["fields"]["止盈价格"] = f"离场：{exit_price}"
+
+                # 重试添加记录
+                result = _feishu_client.add_records(
+                    FEISHU_APP_TOKEN,
+                    FEISHU_TABLE_ID,
+                    [retry_record]
+                )
+
+                # 获取记录ID
+                record_id = ""
+                if result.get("data", {}).get("records"):
+                    record_id = result["data"]["records"][0].get("record_id", "")
+
+                operation_text = f"{operation_type}订单" if operation_type else "订单"
+                logger.info(f"Successfully saved (retry) {operation_text}: {order_type} {direction}")
+
+                return f"Successfully saved {operation_text}: {order_type} {direction} with {entry_amount}, record_id: {record_id} (status in info content)"
+            except Exception as retry_error:
+                logger.error(f"Retry also failed: {retry_error}")
+                return f"Failed to save trade order (both attempts failed): {str(e)}"
+
         return error_msg
 
 
@@ -769,10 +850,69 @@ def update_order_status(record_id: str, status: str, order_id: str = "", entry_p
             f"/bitable/v1/apps/{FEISHU_APP_TOKEN}/tables/{FEISHU_TABLE_ID}/records/{record_id}",
             json={"fields": fields}
         )
-        
+
         logger.info(f"Successfully updated record {record_id} status to {status}")
         return f"Successfully updated order status to {status}" + (f" with order_id: {order_id}" if order_id else "")
     except Exception as e:
         error_msg = f"Failed to update order status: {str(e)}"
         logger.error(error_msg)
+
+        # 如果是字段错误（Extra data），尝试只在信息内容中更新
+        if "Extra data" in str(e) or "FieldNameNotFound" in str(e):
+            try:
+                logger.info(f"Status field update failed ({str(e)[:50]}), updating info content instead...")
+
+                # 获取当前记录
+                result = _feishu_client._request(
+                    "GET",
+                    f"/bitable/v1/apps/{FEISHU_APP_TOKEN}/tables/{FEISHU_TABLE_ID}/records/{record_id}"
+                )
+                current_fields = result.get("data", {}).get("fields", {})
+                current_info = current_fields.get("信息内容", "")
+
+                # 更新状态标记在信息内容前面
+                # 移除旧的状态标记
+                import re
+                current_info = re.sub(r'^【[^\n]+】\n', '', current_info)
+
+                # 添加新的状态标记
+                current_info = f"【{status}】\n{current_info}"
+
+                # 如果提供了订单ID、开仓价格或持仓数量，继续更新
+                if order_id or entry_price or position_size:
+                    # 更新信息内容中的订单ID
+                    if order_id and "订单ID：" not in current_info:
+                        lines = current_info.split('\n', 1)
+                        if len(lines) == 2:
+                            current_info = f"{lines[0]}\n订单ID：{order_id}\n{lines[1]}"
+                        else:
+                            current_info = f"订单ID：{order_id}\n{current_info}"
+
+                    # 更新实际开仓价格
+                    if entry_price:
+                        if "实际开仓价格" not in current_info:
+                            current_info = f"{current_info}\n实际开仓价格：{entry_price}"
+                        else:
+                            current_info = re.sub(r'实际开仓价格[：:]\s*[^\n]+', f'实际开仓价格：{entry_price}', current_info)
+
+                    # 更新实际持仓数量
+                    if position_size:
+                        if "实际持仓数量" not in current_info:
+                            current_info = f"{current_info}\n实际持仓数量：{position_size}"
+                        else:
+                            current_info = re.sub(r'实际持仓数量[：:]\s*[^\n]+', f'实际持仓数量：{position_size}', current_info)
+
+                # 更新记录
+                update_result = _feishu_client._request(
+                    "PATCH",
+                    f"/bitable/v1/apps/{FEISHU_APP_TOKEN}/tables/{FEISHU_TABLE_ID}/records/{record_id}",
+                    json={"fields": {"信息内容": current_info}}
+                )
+
+                logger.info(f"Successfully updated record {record_id} info content with status: {status}")
+                return f"Successfully updated order status (in info content) to {status}" + (f" with order_id: {order_id}" if order_id else "")
+            except Exception as retry_error:
+                logger.error(f"Retry also failed: {retry_error}")
+                return f"Failed to update order status (both attempts failed): {str(e)}"
+
         return error_msg

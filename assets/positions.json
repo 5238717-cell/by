@@ -77,5 +77,43 @@
     "close_value": null,
     "profit_loss": null,
     "profit_loss_percent": null
+  },
+  "ETHUSDT-BUY-1767168544": {
+    "position_id": "ETHUSDT-BUY-1767168544",
+    "symbol": "ETHUSDT",
+    "side": "BUY",
+    "quantity": 0.01,
+    "entry_price": 3500.0,
+    "entry_value": 35.0,
+    "trade_type": "spot",
+    "leverage": 1,
+    "take_profit_price": 3600.0,
+    "stop_loss_price": 3400.0,
+    "status": "open",
+    "open_time": "2025-12-31 16:09:04",
+    "close_time": null,
+    "close_price": null,
+    "close_value": null,
+    "profit_loss": null,
+    "profit_loss_percent": null
+  },
+  "SOLUSDT-BUY-1767168725": {
+    "position_id": "SOLUSDT-BUY-1767168725",
+    "symbol": "SOLUSDT",
+    "side": "BUY",
+    "quantity": 10.0,
+    "entry_price": 150.0,
+    "entry_value": 1500.0,
+    "trade_type": "spot",
+    "leverage": 1,
+    "take_profit_price": 160.0,
+    "stop_loss_price": 140.0,
+    "status": "open",
+    "open_time": "2025-12-31 16:12:05",
+    "close_time": null,
+    "close_price": null,
+    "close_value": null,
+    "profit_loss": null,
+    "profit_loss_percent": null
   }
 }
