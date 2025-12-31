@@ -493,7 +493,6 @@ if __name__ == "__main__":
     run_config_wizard(config_path)
     
     # 重新加载配置（如果配置向导创建了新配置）
-    global config
     config = load_config()
     
     print("\n" + "=" * 60)
