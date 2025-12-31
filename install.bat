@@ -13,9 +13,9 @@ REM ============================================
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
-REM 项目配置（需要根据实际情况修改）
-set "REPO_URL=https://github.com/your-username/multi-agent-system.git"
-set "PROJECT_DIR=multi-agent-system"
+REM 项目配置
+set "REPO_URL=https://github.com/5238717-cell/by.git"
+set "PROJECT_DIR=by"
 set "BRANCH=main"
 
 REM 打印头部

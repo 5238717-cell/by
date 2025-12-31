@@ -20,9 +20,9 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# 项目配置（需要根据实际情况修改）
-REPO_URL="https://github.com/your-username/multi-agent-system.git"
-PROJECT_DIR="multi-agent-system"
+# 项目配置
+REPO_URL="https://github.com/5238717-cell/by.git"
+PROJECT_DIR="by"
 BRANCH="main"
 
 # 打印带颜色的消息
