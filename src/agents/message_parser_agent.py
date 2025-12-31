@@ -149,14 +149,20 @@ class MessageParserAgent:
         return keywords if keywords else None
 
     def extract_operation_type(self, text: str) -> str:
-        """提取操作类型：开仓 或 离场"""
-        # 先检查是否是离场
+        """提取操作类型：开仓、补仓 或 离场"""
+        # 先检查是否是补仓
+        add_keywords = ['补仓', '加仓', 'add', 'add position', '加注']
+        for keyword in add_keywords:
+            if keyword in text:
+                return '补仓'
+        
+        # 再检查是否是离场
         exit_keywords = ['平仓', '离场', '出局', '了结', 'close', 'exit']
         for keyword in exit_keywords:
             if keyword in text:
                 return '离场'
         
-        # 如果不是离场，则默认为开仓
+        # 如果不是补仓也不是离场，则默认为开仓
         return '开仓'
 
     def extract_exit_price(self, text: str) -> Optional[str]:
@@ -193,13 +199,14 @@ class MessageParserAgent:
         # 默认为手动离场
         return None
 
-    def parse(self, message_content: str, group_name: str) -> Dict[str, Any]:
+    def parse(self, message_content: str, group_name: str, parent_order_id: str = None) -> Dict[str, Any]:
         """
         解析消息内容，提取订单信息
 
         Args:
             message_content: 消息内容
             group_name: 群名称
+            parent_order_id: 父订单ID（补仓/离场时使用）
 
         Returns:
             解析结果
@@ -207,8 +214,12 @@ class MessageParserAgent:
         try:
             logger.info(f"开始解析消息: {message_content[:100]}...")
 
-            # 提取操作类型（开仓/离场）
+            # 提取操作类型（开仓/补仓/离场）
             operation_type = self.extract_operation_type(message_content)
+            
+            # 提取订单类型和方向
+            order_type = self.extract_order_type(message_content)
+            direction = self.extract_direction(message_content)
             
             # 根据操作类型提取不同的字段
             if operation_type == '离场':
@@ -218,15 +229,31 @@ class MessageParserAgent:
                 exit_reason = self.extract_exit_reason(message_content)
                 
                 # 离场时不需要入场金额、止盈、止损
-                order_type = self.extract_order_type(message_content)
-                direction = self.extract_direction(message_content)
                 entry_amount = None
                 take_profit = None
                 stop_loss = None
+                
+                # 解析持仓数量和杠杆（从消息中提取）
+                position_size = self._extract_position_size(message_content)
+                leverage = self._extract_leverage(message_content)
+                
+            elif operation_type == '补仓':
+                # 补仓操作特有字段
+                entry_amount = self.extract_entry_amount(message_content)
+                take_profit = self.extract_take_profit(message_content)
+                stop_loss = None  # 补仓通常不单独设置止损
+                
+                # 补仓时不需要离场相关字段
+                exit_price = None
+                profit_loss = None
+                exit_reason = None
+                
+                # 解析持仓数量和杠杆
+                position_size = self._extract_position_size(message_content)
+                leverage = self._extract_leverage(message_content)
+                
             else:
                 # 开仓操作字段
-                order_type = self.extract_order_type(message_content)
-                direction = self.extract_direction(message_content)
                 entry_amount = self.extract_entry_amount(message_content)
                 take_profit = self.extract_take_profit(message_content)
                 stop_loss = self.extract_stop_loss(message_content)
@@ -235,6 +262,19 @@ class MessageParserAgent:
                 exit_price = None
                 profit_loss = None
                 exit_reason = None
+                
+                # 解析持仓数量和杠杆
+                position_size = self._extract_position_size(message_content)
+                leverage = self._extract_leverage(message_content)
+            
+            # 生成订单ID
+            import time
+            timestamp = int(time.time())
+            order_id = f"{order_type or 'TRADE'}-{direction or 'UNKNOWN'}-{timestamp}"
+            
+            # 如果是补仓或离场，必须提供父订单ID
+            if operation_type in ['补仓', '离场'] and not parent_order_id:
+                logger.warning(f"操作类型为{operation_type}，但未提供父订单ID")
             
             # 提取策略关键词
             strategy_keywords = self.extract_strategy_keywords(message_content)
@@ -243,15 +283,19 @@ class MessageParserAgent:
             order_info = {
                 "group_name": group_name,
                 "message_content": message_content,
-                "operation_type": operation_type,  # 新增：操作类型
+                "operation_type": operation_type,  # 开仓/补仓/离场
                 "order_type": order_type,
                 "direction": direction,
                 "entry_amount": entry_amount,
                 "take_profit": take_profit,
                 "stop_loss": stop_loss,
-                "exit_price": exit_price,  # 新增：离场价格
-                "profit_loss": profit_loss,  # 新增：盈亏信息
-                "exit_reason": exit_reason,  # 新增：离场原因
+                "exit_price": exit_price,
+                "profit_loss": profit_loss,
+                "exit_reason": exit_reason,
+                "order_id": order_id,  # 订单唯一ID
+                "parent_order_id": parent_order_id or "",  # 父订单ID
+                "position_size": position_size,  # 持仓数量
+                "leverage": leverage,  # 杠杆倍数
                 "strategy_keywords": strategy_keywords,
                 "parsed_at": datetime.now().isoformat()
             }
@@ -259,6 +303,8 @@ class MessageParserAgent:
             logger.info("解析结果:")
             logger.info(f"  群名称: {order_info['group_name']}")
             logger.info(f"  操作类型: {order_info['operation_type']}")
+            logger.info(f"  订单ID: {order_info['order_id']}")
+            logger.info(f"  父订单ID: {order_info['parent_order_id']}")
             logger.info(f"  订单类型: {order_info['order_type']}")
             logger.info(f"  开仓方向: {order_info['direction']}")
             logger.info(f"  入场金额: {order_info['entry_amount']}")
@@ -267,6 +313,8 @@ class MessageParserAgent:
             logger.info(f"  离场价格: {order_info['exit_price']}")
             logger.info(f"  盈亏信息: {order_info['profit_loss']}")
             logger.info(f"  离场原因: {order_info['exit_reason']}")
+            logger.info(f"  持仓数量: {order_info['position_size']}")
+            logger.info(f"  杠杆倍数: {order_info['leverage']}")
             logger.info(f"  策略关键词: {order_info['strategy_keywords']}")
 
             return {
@@ -280,6 +328,36 @@ class MessageParserAgent:
                 "success": False,
                 "error": str(e)
             }
+    
+    def _extract_position_size(self, text: str) -> Optional[str]:
+        """提取持仓数量"""
+        patterns = [
+            r'持仓[数量]*[:：\s]*([0-9,.]+)',
+            r'数量[:：\s]*([0-9,.]+)',
+            r'仓位[:：\s]*([0-9,.]+)',
+            r'size[:：\s]*([0-9,.]+)',
+            r'张数[:：\s]*([0-9,.]+)',
+            r'([0-9,.]+)\s*(张|手|个|u)'
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group(1)
+        return None
+    
+    def _extract_leverage(self, text: str) -> Optional[str]:
+        """提取杠杆倍数"""
+        patterns = [
+            r'杠杆[:：\s]*([0-9,.]+)[倍]*',
+            r'leverage[:：\s]*([0-9,.]+)[x]*',
+            r'([0-9,.]+)[x倍]*\s*杠杆',
+            r'([0-9,.]+)[x] lever'
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group(1)
+        return None
 
 
 def build_message_parser_agent():
