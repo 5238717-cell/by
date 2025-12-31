@@ -157,34 +157,46 @@ def save_trade_order(
     take_profit: str,
     stop_loss: str,
     raw_message: str,
+    group_name: str = "未知群",
+    coin_info: str = "",
     runtime=None
 ) -> str:
     """
     将交易订单保存到飞书多维表格
     
     Args:
-        order_type: 订单类型（如：BTC/USDT）
-        direction: 开仓方向（long/short）
-        entry_amount: 入场金额
+        order_type: 订单类型（如：BTC现货交易）
+        direction: 开仓方向（做多/做空）
+        entry_amount: 入场价格/金额
         take_profit: 止盈价格
         stop_loss: 止损价格
-        raw_message: 原始消息
+        raw_message: 原始消息内容
+        group_name: 群名称（默认：未知群）
+        coin_info: 币种信息（可选）
     
     Returns:
         保存结果
     """
     try:
-        # 构建记录数据
+        # 构建记录数据，字段名与飞书表格实际字段匹配
         record = {
             "fields": {
                 "订单类型": order_type,
                 "开仓方向": direction,
-                "入场金额": entry_amount,
-                "止盈": take_profit,
-                "止损": stop_loss,
-                "原始消息": raw_message
+                "入场价格": entry_amount,
+                "止盈价格": take_profit,
+                "信息内容": raw_message,
+                "群名": group_name
             }
         }
+        
+        # 如果提供了币种信息，则添加
+        if coin_info:
+            record["fields"]["币种信息"] = coin_info
+        
+        # 将止损信息附加到信息内容中（因为表格中没有止损价格字段）
+        if stop_loss:
+            record["fields"]["信息内容"] = f"{raw_message}\n止损：{stop_loss}"
         
         # 添加记录
         result = _feishu_client.add_records(
@@ -226,11 +238,14 @@ def get_recent_orders(limit: int = 10, runtime=None) -> str:
             fields = record.get("fields", {})
             orders.append({
                 "record_id": record.get("record_id"),
+                "群名": fields.get("群名"),
+                "信息内容": fields.get("信息内容"),
                 "订单类型": fields.get("订单类型"),
+                "币种信息": fields.get("币种信息"),
                 "开仓方向": fields.get("开仓方向"),
-                "入场金额": fields.get("入场金额"),
-                "止盈": fields.get("止盈"),
-                "止损": fields.get("止损"),
+                "入场价格": fields.get("入场价格"),
+                "止盈价格": fields.get("止盈价格"),
+                "时间": fields.get("时间"),
                 "created_time": record.get("created_time")
             })
         

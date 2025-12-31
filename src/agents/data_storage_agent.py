@@ -81,17 +81,17 @@ class DataStorageAgent:
         self.table_id = table_id
         self.client = FeishuBitableClient()
 
-        # 字段名称映射
+        # 字段名称映射（与飞书表格实际字段匹配）
         self.field_mapping = {
-            'group_name': '群名称',
-            'message_content': '消息内容',
+            'group_name': '群名',
+            'message_content': '信息内容',
             'order_type': '订单类型',
             'direction': '开仓方向',
-            'entry_amount': '入场金额',
-            'take_profit': '止盈',
-            'stop_loss': '止损',
+            'entry_amount': '入场价格',
+            'take_profit': '止盈价格',
+            'stop_loss': '止损价格',
             'strategy_keywords': '策略关键词',
-            'parsed_at': '解析时间'
+            'parsed_at': '时间'
         }
 
     def build_fields(self, order_info: Dict[str, Any]) -> Dict[str, Any]:
