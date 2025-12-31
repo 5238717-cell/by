@@ -106,11 +106,32 @@ FEISHU_BITABLE_APP_TOKEN=bascnxxxxxxxxxxxxxxx
 FEISHU_BITABLE_TABLE_ID=tblxxxxxxxxxxxxxxx
 ```
 
-### 3. 运行系统
+### 3. 配置 Webhook 服务器（首次运行自动触发）
+
+```bash
+# 首次运行 Webhook 服务器时，系统会自动启动配置向导
+python src/webhook_server.py
+
+# 或者手动运行配置向导
+python scripts/init_webhook_config.py
+```
+
+配置向导将引导您完成：
+- Webhook 端点配置
+- 服务器配置
+- 消息过滤规则
+- 消息处理配置
+
+详细配置说明请参考：[Webhook 配置指南](docs/WEBHOOK_CONFIG_GUIDE.md)
+
+### 4. 运行系统
 
 ```bash
 # 运行多 Agent 协作系统
 python src/main_multiagent.py
+
+# 或者运行 Webhook 服务器
+python src/webhook_server.py
 ```
 
 ---
@@ -119,6 +140,7 @@ python src/main_multiagent.py
 
 - **[多 Agent 系统指南](docs/MULTI_AGENT_GUIDE.md)**: 详细介绍多 Agent 架构、各 Agent 功能和使用方法
 - **[配置指南](docs/SETUP_GUIDE.md)**: 完整的飞书应用和多维表格配置说明
+- **[Webhook 配置指南](docs/WEBHOOK_CONFIG_GUIDE.md)**: Webhook 服务器的交互式配置向导使用说明
 
 ---
 

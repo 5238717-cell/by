@@ -13,6 +13,7 @@ from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import asyncio
+from utils.config.config_initializer import run_config_wizard
 
 # 配置日志
 logging.basicConfig(
@@ -480,4 +481,22 @@ def start_server():
     )
 
 if __name__ == "__main__":
+    # 首次运行检查：如果配置文件不存在或无效，运行配置向导
+    workspace_path = os.getenv("COZE_WORKSPACE_PATH", "/workspace/projects")
+    config_path = os.path.join(workspace_path, "config/webhook_config.json")
+    
+    print("\n" + "=" * 60)
+    print("  交易信号 Webhook 服务")
+    print("=" * 60)
+    
+    # 运行配置向导（如果需要）
+    run_config_wizard(config_path)
+    
+    # 重新加载配置（如果配置向导创建了新配置）
+    global config
+    config = load_config()
+    
+    print("\n" + "=" * 60)
+    print("\n🚀 启动 Webhook 服务器...\n")
+    
     start_server()
