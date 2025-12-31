@@ -21,6 +21,8 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # 项目配置
+# 注意：私有仓库需要使用 Personal Access Token 或将仓库设为公开
+# 格式：https://YOUR_TOKEN@github.com/username/repo.git
 REPO_URL="https://github.com/5238717-cell/by.git"
 PROJECT_DIR="by"
 BRANCH="main"
@@ -112,8 +114,9 @@ clone_repo() {
     # 检查目录是否已存在
     if [ -d "$PROJECT_DIR" ]; then
         print_warning "项目目录已存在: $PROJECT_DIR"
+        echo ""
         read -p "$(echo -e ${YELLOW}是否删除并重新克隆? (y/n): ${NC})" -n 1 -r
-        echo
+        echo ""
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             print_info "删除旧目录..."
             rm -rf "$PROJECT_DIR"
@@ -124,17 +127,40 @@ clone_repo() {
         fi
     fi
 
-    print_info "从代码仓库克隆项目..."
-    git clone -b "$BRANCH" "$REPO_URL" "$PROJECT_DIR"
+    print_info "尝试从代码仓库克隆项目..."
+    print_info "仓库地址: $REPO_URL"
+
+    # 尝试克隆
+    git clone -b "$BRANCH" "$REPO_URL" "$PROJECT_DIR" 2>&1
 
     if [ $? -eq 0 ]; then
         print_success "代码克隆完成"
+        cd "$PROJECT_DIR"
+        return 0
     else
-        print_error "代码克隆失败"
+        print_error "代码克隆失败（可能需要认证）"
+        echo ""
+        echo "=========================================="
+        echo "  解决方案"
+        echo "=========================================="
+        echo ""
+        echo "1. 将仓库设为公开（推荐）："
+        echo "   访问 $REPO_URL"
+        echo "   → Settings → Change visibility → Make public"
+        echo ""
+        echo "2. 使用 Personal Access Token："
+        echo "   在 GitHub 生成 Token：https://github.com/settings/tokens"
+        echo "   然后使用带 Token 的 URL 克隆："
+        echo "   git clone https://YOUR_TOKEN@github.com/username/repo.git"
+        echo ""
+        echo "3. 手动下载代码："
+        echo "   访问 https://github.com/5238717-cell/by"
+        echo "   点击 Code → Download ZIP"
+        echo "   解压后运行安装脚本"
+        echo ""
+        echo "=========================================="
         exit 1
     fi
-
-    cd "$PROJECT_DIR"
 }
 
 # 安装依赖
