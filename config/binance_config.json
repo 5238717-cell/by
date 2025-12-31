@@ -1,6 +1,6 @@
 {
-  "api_key": "YOUR_BINANCE_API_KEY_HERE",
-  "api_secret": "YOUR_BINANCE_API_SECRET_HERE",
+  "api_key": "DrNM8EcamQ93k8KRx3uGi5jBhR7Xkzq6077b2AZDtRcnk1NSAcdZPpTK85OZiuGt",
+  "api_secret": "aD6hoe98xDnZp9mVa9bi7Q4g6NcF5mmeGnvDitIVxFJYMWnS1jph0bYRrd94C86q",
   "testnet": true,
   "default_trade_type": "spot"
 }
