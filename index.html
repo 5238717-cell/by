@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>飞书多 Agent 协作系统 - 一键部署</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 900px;
+            width: 100%;
+            padding: 40px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+        
+        .quick-start {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        
+        .quick-start h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+        
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 10px 0;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+        }
+        
+        .code-block code {
+            display: block;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+        
+        .copy-btn:hover {
+            background: #5568d3;
+        }
+        
+        .platform-section {
+            margin: 30px 0;
+        }
+        
+        .platform-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .platform-icon {
+            font-size: 1.5em;
+            margin-right: 10px;
+        }
+        
+        .steps {
+            counter-reset: step;
+        }
+        
+        .step {
+            margin: 15px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            position: relative;
+        }
+        
+        .step::before {
+            counter-increment: step;
+            content: counter(step);
+            background: #667eea;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        .feature {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .feature-icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        
+        .feature h4 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .feature p {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        
+        .warning h4 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+        
+        .warning p {
+            color: #856404;
+            font-size: 0.9em;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .features {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 飞书多 Agent 协作系统</h1>
+            <p>基于 LangGraph 的智能交易自动化系统，30 秒一键部署</p>
+        </div>
+
+        <div class="quick-start">
+            <h2>⚡ 30 秒快速安装</h2>
+            
+            <div class="platform-section">
+                <h3><span class="platform-icon">🐧</span> Linux / macOS</h3>
+                <div class="code-block" style="position: relative;">
+                    <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                    <code>curl -fsSL https://raw.githubusercontent.com/your-repo/main/install.sh | bash</code>
+                </div>
+                <div class="code-block" style="position: relative;">
+                    <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                    <code>wget -qO- https://raw.githubusercontent.com/your-repo/main/install.sh | bash</code>
+                </div>
+            </div>
+
+            <div class="platform-section">
+                <h3><span class="platform-icon">🪟</span> Windows</h3>
+                <div class="steps">
+                    <div class="step">
+                        访问：<a href="https://raw.githubusercontent.com/your-repo/main/install.bat" target="_blank">https://raw.githubusercontent.com/your-repo/main/install.bat</a>
+                    </div>
+                    <div class="step">
+                        右键 → 另存为 → <code>install.bat</code>
+                    </div>
+                    <div class="step">
+                        双击运行 <code>install.bat</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="features">
+            <div class="feature">
+                <div class="feature-icon">🤖</div>
+                <h4>多 Agent 协作</h4>
+                <p>4 个专门 Agent 各司其职，通过 LangGraph 工作流协调</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">📊</div>
+                <h4>智能解析</h4>
+                <p>自动提取订单信息，支持多种交易策略</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">💾</div>
+                <h4>自动存储</h4>
+                <p>自动写入飞书多维表格，无需手动操作</p>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">🌐</div>
+                <h4>可视化配置</h4>
+                <p>友好的 Web 界面，轻松配置和管理</p>
+            </div>
+        </div>
+
+        <div class="warning">
+            <h4>⚠️ 配置说明</h4>
+            <p>使用前请将 <code>your-repo</code> 替换为您的实际代码仓库地址。例如：</p>
+            <div class="code-block">
+                <code>https://raw.githubusercontent.com/username/multi-agent-system/main/install.sh</code>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>
+                <a href="https://github.com/your-repo/multi-agent-system" target="_blank">GitHub 仓库</a> |
+                <a href="docs/ONLINE_INSTALL.md">在线部署文档</a> |
+                <a href="README.md">完整文档</a>
+            </p>
+            <p style="margin-top: 10px;">© 2025 飞书多 Agent 协作系统 | MIT License</p>
+        </div>
+    </div>
+
+    <script>
+        function copyCode(button) {
+            const codeBlock = button.parentElement;
+            const code = codeBlock.querySelector('code').textContent;
+            
+            navigator.clipboard.writeText(code).then(() => {
+                const originalText = button.textContent;
+                button.textContent = '已复制！';
+                setTimeout(() => {
+                    button.textContent = originalText;
+                }, 2000);
+            }).catch(err => {
+                console.error('复制失败:', err);
+                alert('复制失败，请手动复制');
+            });
+        }
+    </script>
+</body>
+</html>

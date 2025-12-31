@@ -14,7 +14,31 @@
 
 ---
 
-## 🎯 30 秒快速启动
+## 🚀 在线一键安装（推荐）
+
+**Linux / macOS:**
+
+```bash
+# 使用 curl
+curl -fsSL https://raw.githubusercontent.com/your-repo/main/install.sh | bash
+
+# 或使用 wget
+wget -qO- https://raw.githubusercontent.com/your-repo/main/install.sh | bash
+```
+
+**Windows:**
+
+1. 访问：https://raw.githubusercontent.com/your-repo/main/install.bat
+2. 右键 → 另存为 → `install.bat`
+3. 双击运行
+
+> 💡 **在线安装会自动完成**：克隆代码 → 安装依赖 → 初始化配置 → 启动系统
+
+详细说明请查看：[在线一键部署指南](docs/ONLINE_INSTALL.md)
+
+---
+
+## 🎯 30 秒快速启动（本地）
 
 ### Linux/Mac
 
@@ -227,7 +251,10 @@ python src/web_ui.py
 
 ## 📖 详细文档
 
+- **[在线一键部署](docs/ONLINE_INSTALL.md)**: 从代码仓库一键部署，30 秒启动系统
+- **[代码仓库配置](docs/REPO_CONFIG.md)**: 配置您的代码仓库地址
 - **[一键部署指南](DEPLOY.md)**: 完整的一键部署方案，支持 Linux/Mac/Windows
+- **[快速启动指南](QUICKSTART.md)**: 30 秒快速启动说明
 - **[多 Agent 系统指南](docs/MULTI_AGENT_GUIDE.md)**: 详细介绍多 Agent 架构、各 Agent 功能和使用方法
 - **[配置指南](docs/SETUP_GUIDE.md)**: 完整的飞书应用和多维表格配置说明
 - **[Webhook 配置指南](docs/WEBHOOK_CONFIG_GUIDE.md)**: Webhook 服务器的交互式配置向导使用说明
