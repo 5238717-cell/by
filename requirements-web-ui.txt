@@ -1,0 +1,13 @@
+# Web UI 系统核心依赖
+fastapi==0.121.2
+uvicorn==0.38.0
+jinja2==3.1.6
+python-multipart
+pydantic
+langchain>=0.3.20
+langgraph>=0.3.10
+langchain-openai>=0.3.0
+requests
+lark-oapi==1.2.9
+python-binance==1.0.34
+aiohttp

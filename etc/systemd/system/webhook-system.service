@@ -1,0 +1,18 @@
+[Unit]
+Description=Webhook Configuration Management System
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/workspace/projects
+Environment="PATH=/opt/webhook-system-env/bin"
+Environment="PYTHONPATH=/workspace/projects/src"
+ExecStart=/opt/webhook-system-env/bin/python /workspace/projects/src/web_ui.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/webhook-system.log
+StandardError=append:/var/log/webhook-system-error.log
+
+[Install]
+WantedBy=multi-user.target
