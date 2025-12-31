@@ -51,6 +51,7 @@ class FeishuBitable:
         """发送HTTP请求"""
         try:
             url = f"{self.base_url}{path}"
+            logger.info(f"Feishu API request: {method} {url}, json={json}")
             resp = requests.request(
                 method, 
                 url, 
@@ -59,6 +60,7 @@ class FeishuBitable:
                 json=json, 
                 timeout=self.timeout
             )
+            logger.info(f"Feishu API response status: {resp.status_code}, content: {resp.text[:500]}")
             resp_data = resp.json()
             
             if resp_data.get("code") != 0:
@@ -70,6 +72,9 @@ class FeishuBitable:
         except requests.exceptions.RequestException as e:
             logger.error(f"Feishu API request error: {e}")
             raise Exception(f"Feishu API request error: {e}")
+        except Exception as e:
+            logger.error(f"Feishu API unexpected error: {e}, response: {resp.text if 'resp' in locals() else 'no response'}")
+            raise Exception(f"Feishu API unexpected error: {e}")
     
     def list_fields(self, app_token: str, table_id: str) -> List[Dict]:
         """获取表格字段列表"""
@@ -89,11 +94,11 @@ class FeishuBitable:
         return result
     
     def has_status_field(self) -> bool:
-        """检查表格是否有"状态"字段"""
+        """检查表格是否有"状态信息"字段"""
         try:
             fields = self.list_fields(FEISHU_APP_TOKEN, FEISHU_TABLE_ID)
             for field in fields:
-                if field.get("field_name") == "状态":
+                if field.get("field_name") == "状态信息":
                     return True
             return False
         except Exception as e:
@@ -105,7 +110,7 @@ class FeishuBitable:
         try:
             fields = self.list_fields(FEISHU_APP_TOKEN, FEISHU_TABLE_ID)
             for field in fields:
-                if field.get("field_name") == "状态":
+                if field.get("field_name") == "状态信息":
                     return field
             return None
         except Exception as e:
@@ -120,11 +125,11 @@ class FeishuBitable:
         return None
     
     def get_status_field_options(self) -> list:
-        """获取状态字段的所有选项值"""
+        """获取状态字段的所有选项值（如果是单选类型）"""
         try:
             fields = self.list_fields(FEISHU_APP_TOKEN, FEISHU_TABLE_ID)
             for field in fields:
-                if field.get("field_name") == "状态":
+                if field.get("field_name") == "状态信息":
                     # 单选字段，获取选项列表
                     return field.get("property", {}).get("select", {}).get("options", [])
             return []
@@ -293,28 +298,46 @@ def get_table_fields(runtime=None) -> str:
 @tool
 def ensure_status_field_options(runtime=None) -> str:
     """
-    确保飞书表格的状态字段包含所需的选项（开仓信号、已下单）
-    如果选项不存在，则自动添加
+    确保飞书表格的状态字段支持"开仓信号"和"已下单"两个状态值
+    对于文本类型字段，直接返回成功
+    对于单选类型字段，尝试添加缺失的选项
     
     Returns:
         操作结果
     """
     try:
-        result = _feishu_client.ensure_status_options(["开仓信号", "已下单"])
+        # 获取状态字段信息
+        status_field = _feishu_client.get_status_field()
         
-        if result["success"]:
-            if result["added"]:
-                message = f"✅ 成功初始化状态字段选项：{', '.join(result['added'])}"
-                logger.info(message)
-                return message
+        if not status_field:
+            return "❌ 未找到「状态信息」字段"
+        
+        field_type = status_field.get("type")
+        
+        if field_type == 1:
+            # 文本类型，直接支持写入"开仓信号"和"已下单"
+            message = "✅ 状态字段为文本类型，可直接写入「开仓信号」和「已下单」"
+            logger.info(message)
+            return message
+        elif field_type == 3:
+            # 单选类型，需要添加选项
+            result = _feishu_client.ensure_status_options(["开仓信号", "已下单"])
+            
+            if result["success"]:
+                if result["added"]:
+                    message = f"✅ 成功初始化状态字段选项：{', '.join(result['added'])}"
+                    logger.info(message)
+                    return message
+                else:
+                    message = "✅ 状态字段选项已全部存在（开仓信号、已下单）"
+                    logger.info(message)
+                    return message
             else:
-                message = "✅ 状态字段选项已全部存在（开仓信号、已下单）"
-                logger.info(message)
+                message = f"❌ 初始化状态字段选项失败：{result['message']}"
+                logger.error(message)
                 return message
         else:
-            message = f"❌ 初始化状态字段选项失败：{result['message']}"
-            logger.error(message)
-            return message
+            return f"❌ 状态字段类型不支持（当前类型：{field_type}），建议使用文本类型或单选类型"
             
     except Exception as e:
         error_msg = f"❌ ensure_status_field_options error: {str(e)}"
@@ -432,25 +455,37 @@ def save_trade_order(
             }
         }
         
-        # 检查是否有"状态"字段
+        # 检查是否有"状态信息"字段
         has_status = _feishu_client.has_status_field()
         if has_status:
-            # 获取状态字段的所有选项
-            status_options = _feishu_client.get_status_field_options()
-            
-            # 检查状态值是否在选项列表中
-            valid_status = None
-            for option in status_options:
-                if option.get("name") == status:
-                    valid_status = status
-                    break
-            
-            if valid_status:
-                # 如果状态值有效，直接写入
-                record["fields"]["状态"] = status
+            # 获取状态字段信息
+            status_field = _feishu_client.get_status_field()
+            if status_field:
+                field_type = status_field.get("type")
+                # 文本类型(type=1)直接写入，单选类型(type=3)需要检查选项
+                if field_type == 1:
+                    # 文本类型，直接写入状态值
+                    record["fields"]["状态信息"] = status
+                    logger.info(f"Status field (text type) set to: {status}")
+                elif field_type == 3:
+                    # 单选类型，检查选项
+                    status_options = _feishu_client.get_status_field_options()
+                    valid_status = None
+                    for option in status_options:
+                        if option.get("name") == status:
+                            valid_status = status
+                            break
+                    
+                    if valid_status:
+                        # 如果状态值有效，直接写入
+                        record["fields"]["状态信息"] = status
+                    else:
+                        # 如果状态值不在选项中，将状态信息添加到信息内容前面
+                        logger.warning(f"Status value '{status}' not in options: {[o.get('name') for o in status_options]}")
+                        status_prefix = f"【{status}】\n"
+                        record["fields"]["信息内容"] = status_prefix + info_content
             else:
-                # 如果状态值不在选项中，将状态信息添加到信息内容前面
-                logger.warning(f"Status value '{status}' not in options: {[o.get('name') for o in status_options]}")
+                # 字段信息获取失败，降级到信息内容字段
                 status_prefix = f"【{status}】\n"
                 record["fields"]["信息内容"] = status_prefix + info_content
         else:
